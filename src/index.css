@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Prevent content from shifting while checkers overflow their points */
+* {
+  box-sizing: border-box;
+}
