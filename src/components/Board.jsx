@@ -1,4 +1,5 @@
 import Point from './Point'
+import Checker from './Checker'
 import Dice from './Dice'
 import GameStatus from './GameStatus'
 import WinBar from './WinBar'
@@ -27,18 +28,55 @@ function Quadrant({ points, isTop, position, selectedPointNum, onPointClick }) {
   )
 }
 
-function Bar() {
+function BarChecker({ color }) {
+  return (
+    <div style={{ width: '1.5rem', height: '1.5rem', flexShrink: 0 }}>
+      <Checker color={color} />
+    </div>
+  )
+}
+
+function Bar({ bar, onBarClick }) {
+  const pieces = bar?.pieces ?? []
+  const blackCount = pieces.filter(p => p.player_number === 1).length
+  const whiteCount = pieces.filter(p => p.player_number === 2).length
+  const empty = !blackCount && !whiteCount
+
   return (
     <div
-      className="flex items-center justify-center flex-shrink-0"
-      style={{ backgroundColor: RAIL, width: '2rem' }}
+      className="flex flex-col flex-shrink-0"
+      onClick={onBarClick}
+      style={{
+        backgroundColor: RAIL,
+        width: '2rem',
+        cursor: (!empty) ? 'pointer' : 'default',
+      }}
     >
-      <span
-        className="font-mono text-stone-500 select-none"
-        style={{ fontSize: '0.6rem', writingMode: 'vertical-rl', letterSpacing: '0.15em' }}
-      >
-        BAR
-      </span>
+      {/* Top section — White pieces stack downward from center */}
+      <div className="flex-1 flex flex-col items-center justify-end pb-1" style={{ gap: '2px' }}>
+        {Array.from({ length: whiteCount }, (_, i) => (
+          <BarChecker key={i} color="white" />
+        ))}
+      </div>
+
+      {/* Center label — only when bar is empty */}
+      <div className="flex items-center justify-center flex-shrink-0" style={{ height: '2rem' }}>
+        {empty && (
+          <span
+            className="font-mono text-stone-500 select-none"
+            style={{ fontSize: '0.6rem', writingMode: 'vertical-rl', letterSpacing: '0.15em' }}
+          >
+            BAR
+          </span>
+        )}
+      </div>
+
+      {/* Bottom section — Black pieces stack upward from center */}
+      <div className="flex-1 flex flex-col items-center justify-start pt-1" style={{ gap: '2px' }}>
+        {Array.from({ length: blackCount }, (_, i) => (
+          <BarChecker key={i} color="black" />
+        ))}
+      </div>
     </div>
   )
 }
@@ -77,12 +115,16 @@ export default function Board({
   winProb,
   delta,
   hint,
+  pendingSubmit,
   onPointClick,
   onRoll,
   onPass,
+  onSubmit,
+  onReset,
 }) {
   // Translate jbackgammon points array → { [1..24]: { color, count } }
   const position = pointsToPosition(gameState.game_state.points)
+  const bar = gameState.game_state.bar
 
   const ROW_H = '10rem'
 
@@ -93,12 +135,25 @@ export default function Board({
       className="flex flex-col items-center gap-6 p-4 sm:p-6 min-h-screen"
       style={{ backgroundColor: '#111827' }}
     >
-      <h1
-        className="text-xl sm:text-2xl font-bold tracking-widest uppercase select-none"
-        style={{ color: '#d1c5b0', fontFamily: 'Georgia, serif' }}
-      >
-        Backgammon Trainer
-      </h1>
+      <div className="flex items-center gap-4">
+        <h1
+          className="text-xl sm:text-2xl font-bold tracking-widest uppercase select-none"
+          style={{ color: '#d1c5b0', fontFamily: 'Georgia, serif' }}
+        >
+          Backgammon Trainer
+        </h1>
+        <button
+          onClick={onReset}
+          className="px-3 py-1 rounded text-xs font-mono font-bold uppercase tracking-widest"
+          style={{
+            backgroundColor: '#1f2937',
+            color: '#9ca3af',
+            border: '1px solid #374151',
+          }}
+        >
+          New Game
+        </button>
+      </div>
 
       {/* ── Win probability bar ── */}
       <WinBar winProb={winProb} delta={delta} currentPlayer={currentPlayer} />
@@ -133,7 +188,7 @@ export default function Board({
           </div>
 
           {/* Bar */}
-          <Bar />
+          <Bar bar={bar} onBarClick={() => onPointClick('bar')} />
 
           {/* Right half */}
           <div className="flex-1 flex flex-col min-w-0">
@@ -151,7 +206,7 @@ export default function Board({
       </div>
 
       {/* ── Dice + Roll button ── */}
-      <Dice dice={dice} phase={phase} onRoll={onRoll} />
+      <Dice dice={dice} phase={phase} pendingSubmit={pendingSubmit} onRoll={onRoll} onSubmit={onSubmit} />
 
       {/* ── Status bar ── */}
       <GameStatus

@@ -20,19 +20,25 @@ const { Match } = jbackgammon
 export function useGameState() {
   const matchRef = useRef(null)
   if (matchRef.current === null) {
-    matchRef.current = new Match(INITIAL_MATCH_STATE)
+    // Always pass a fresh move_list so INITIAL_MATCH_STATE.move_list is never mutated
+    // by jbackgammon's _addMoveToList (which pushes by reference).
+    matchRef.current = new Match({ ...INITIAL_MATCH_STATE, move_list: [] })
   }
 
   const [snapshot, setSnapshot] = useState(() => matchRef.current.asJson)
 
   // Training layer state
-  const [winProb, setWinProb]   = useState(0.5)
-  const [delta, setDelta]       = useState(null)
-  const [hint, setHint]         = useState(null)
+  const [winProb, setWinProb]       = useState(0.5)
+  const [delta, setDelta]           = useState(null)
+  const [hint, setHint]             = useState(null)
+  const [pendingSubmit, setPendingSubmit] = useState(false)
 
   // Persisted between dice roll and move completion
   const preMoveWinProbRef   = useRef(null)   // winProb just before the player starts moving
   const bestCandidateRef    = useRef(null)   // { winProb, moves } of the best available move
+  const hintTimerRef        = useRef(null)   // pending setTimeout for delayed hint display
+  const pendingWinProbRef   = useRef(null)   // winProb computed at turn-end, revealed on Submit
+  const pendingDeltaRef     = useRef(null)   // delta computed at turn-end, revealed on Submit
 
   function sync() {
     setSnapshot({ ...matchRef.current.asJson })
@@ -56,8 +62,16 @@ export function useGameState() {
     evaluatePosition(rolled.game_state).then(prob => {
       preMoveWinProbRef.current = prob
       setWinProb(prob)
-      setDelta(null)   // clear last turn's delta
-      setHint(null)    // clear last turn's hint
+      setDelta(null)
+      pendingWinProbRef.current = null
+      pendingDeltaRef.current = null
+      setPendingSubmit(false)
+      // Cancel any pending hint from the previous turn and clear it
+      if (hintTimerRef.current) {
+        clearTimeout(hintTimerRef.current)
+        hintTimerRef.current = null
+      }
+      setHint(null)
 
       // Enumerate all legal moves and score each one
       const candidates = enumerateAllMoves(rolled)
@@ -88,10 +102,10 @@ export function useGameState() {
     const playerBefore = gs.currentPlayerNumber
 
     match.touchPoint(pointNumber, currentPlayer)
-    sync()
 
     const afterJson = match.asJson
     const phaseAfter = afterJson.game_state.current_phase
+    sync()
 
     // Turn ended when phase returns to 'roll'
     const turnEnded = phaseBefore === 'move' && phaseAfter === 'roll'
@@ -111,19 +125,50 @@ export function useGameState() {
     _onTurnComplete(afterJson, playerBefore)
   }
 
+  // ─── Submit (hand off to next player) ────────────────────────────────────────
+
+  function submitTurn() {
+    // Reveal win% and delta now that the player has committed their turn
+    if (pendingWinProbRef.current !== null) setWinProb(pendingWinProbRef.current)
+    if (pendingDeltaRef.current !== null) setDelta(pendingDeltaRef.current)
+    pendingWinProbRef.current = null
+    pendingDeltaRef.current = null
+    setPendingSubmit(false)
+  }
+
+  // ─── Reset ───────────────────────────────────────────────────────────────────
+
+  function resetGame() {
+    if (hintTimerRef.current) {
+      clearTimeout(hintTimerRef.current)
+      hintTimerRef.current = null
+    }
+    matchRef.current = new Match({ ...INITIAL_MATCH_STATE, move_list: [] })
+    preMoveWinProbRef.current = null
+    bestCandidateRef.current = null
+    pendingWinProbRef.current = null
+    pendingDeltaRef.current = null
+    setSnapshot({ ...matchRef.current.asJson })
+    setWinProb(0.5)
+    setDelta(null)
+    setHint(null)
+    setPendingSubmit(false)
+  }
+
   // ─── Post-turn analysis ───────────────────────────────────────────────────────
 
   function _onTurnComplete(afterJson, playerWhoMoved) {
+    setPendingSubmit(true)
     evaluatePosition(afterJson.game_state).then(newProb => {
-      setWinProb(newProb)
+      // Store win% and delta in refs — revealed only when player clicks Submit
+      pendingWinProbRef.current = newProb
 
       const pre = preMoveWinProbRef.current
       if (pre !== null) {
-        // Delta from the perspective of the player who just moved
         const rawDelta = playerWhoMoved === 1
           ? (newProb - pre) * 100
           : (pre - newProb) * 100
-        setDelta(rawDelta)
+        pendingDeltaRef.current = rawDelta
       }
 
       // Compare to best available move
@@ -141,12 +186,17 @@ export function useGameState() {
               best.gameState,
               playerWhoMoved
             )
-            setHint({
-              bestMoves:    best.moves,
-              playerWinPct: newProb * 100,
-              bestWinPct:   best.evalProb * 100,
-              explanation,
-            })
+            // Delay the hint so it appears as a post-turn coaching moment,
+            // not an immediate spoiler while the player is still processing
+            hintTimerRef.current = setTimeout(() => {
+              hintTimerRef.current = null
+              setHint({
+                bestMoves:    best.moves,
+                playerWinPct: newProb * 100,
+                bestWinPct:   best.evalProb * 100,
+                explanation,
+              })
+            }, 2000)
           })
         } else {
           setHint(null)
@@ -171,8 +221,11 @@ export function useGameState() {
     winProb,
     delta,
     hint,
+    pendingSubmit,
     rollDice,
     touchPoint,
     touchPass,
+    submitTurn,
+    resetGame,
   }
 }

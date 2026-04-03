@@ -37,7 +37,11 @@ export function enumerateAllMoves(matchSnapshot) {
   if (gs.current_phase !== 'move') return []
 
   const results = []
-  _enumerate(matchSnapshot, [], results)
+  // Pass a clean move_list so temp Match instances don't share the real match's
+  // move_list array reference. Shared references cause _addMoveToList mutations
+  // in the enumerator to pollute the main match's moveList, making _complete
+  // trigger after only one real move instead of two.
+  _enumerate({ ...matchSnapshot, move_list: [] }, [], results)
 
   return deduplicateByPosition(results)
 }
@@ -95,7 +99,10 @@ function _enumerate(snapshot, movesSoFar, results) {
  */
 function tryMove(snapshot, src, dst, player) {
   // --- Select the source ---
-  const m1 = new Match(snapshot)
+  // Copy move_list so multiple tryMove calls at the same level don't share
+  // the same array — jbackgammon assigns it by reference in the constructor,
+  // and _addMoveToList mutates it in-place on MoveIncomplete.
+  const m1 = new Match({ ...snapshot, move_list: [...(snapshot.move_list ?? [])] })
 
   if (src === BAR_SRC) {
     // jbackgammon: touchBar is separate from touchPoint

@@ -14,9 +14,12 @@ export default function App() {
     winProb,
     delta,
     hint,
+    pendingSubmit,
     rollDice,
     touchPoint,
     touchPass,
+    submitTurn,
+    resetGame,
   } = useGameState()
 
   return (
@@ -32,9 +35,12 @@ export default function App() {
       winProb={winProb}
       delta={delta}
       hint={hint}
+      pendingSubmit={pendingSubmit}
       onPointClick={touchPoint}
       onRoll={rollDice}
       onPass={touchPass}
+      onSubmit={submitTurn}
+      onReset={resetGame}
     />
   )
 }

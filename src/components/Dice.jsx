@@ -52,9 +52,9 @@ function Die({ value }) {
  * phase:     'roll' | 'move'
  * onRoll:    called when the Roll button is clicked
  */
-export default function Dice({ dice = [], phase, onRoll }) {
+export default function Dice({ dice = [], phase, pendingSubmit, onRoll, onSubmit }) {
   const [d1, d2] = dice
-  const showRoll = phase === 'roll'
+  const showRoll = phase === 'roll' && !pendingSubmit
 
   return (
     <div className="flex flex-col items-center gap-3">
@@ -75,6 +75,20 @@ export default function Dice({ dice = [], phase, onRoll }) {
           }}
         >
           Roll Dice
+        </button>
+      )}
+      {pendingSubmit && (
+        <button
+          onClick={onSubmit}
+          className="px-6 py-2 rounded-lg text-sm font-mono font-bold uppercase tracking-widest"
+          style={{
+            backgroundColor: '#4c1d95',
+            color: '#ede9fe',
+            border: '1px solid #7c3aed',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+          }}
+        >
+          Submit Turn
         </button>
       )}
     </div>
