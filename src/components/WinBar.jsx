@@ -59,11 +59,11 @@ function DeltaPill({ delta }) {
     setFading(false)
     setVisible(true)
 
-    // Hold for 2.8s then fade
+    // Hold for 5s then fade
     timerRef.current = setTimeout(() => {
       setFading(true)
       setTimeout(() => setVisible(false), 600)
-    }, 2800)
+    }, 5000)
 
     return () => clearTimeout(timerRef.current)
   }, [delta])

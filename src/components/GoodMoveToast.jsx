@@ -35,7 +35,7 @@ export default function GoodMoveToast({ goodMove, onDismiss }) {
     timerRef.current = setTimeout(() => {
       setLeaving(true)
       setTimeout(onDismiss, 400)
-    }, 3800)
+    }, 5500)
 
     return () => clearTimeout(timerRef.current)
   }, [goodMove])
