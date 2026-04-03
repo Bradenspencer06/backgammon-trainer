@@ -10,7 +10,7 @@ const LIGHT_TRI = '#d4a96a'
  * isSelected:  this point is the currently selected source — shown with a glow ring
  * onClick:     called when the user taps this point (Board decides if it's valid)
  */
-export default function Point({ pointNumber, isTop, pointData, isSelected, onClick }) {
+export default function Point({ pointNumber, isTop, pointData, isSelected, isHintFrom, isHintTo, onClick }) {
   const count  = pointData?.count || 0
   const color  = pointData?.color || null
   const isDark = pointNumber % 2 === 1
@@ -51,6 +51,30 @@ export default function Point({ pointNumber, isTop, pointData, isSelected, onCli
             style={{
               clipPath,
               backgroundColor: 'rgba(250, 204, 21, 0.45)',
+              zIndex: 5,
+            }}
+          />
+        )}
+
+        {/* Hint: source point — amber glow (where the piece came from) */}
+        {isHintFrom && !isSelected && (
+          <div
+            className="absolute inset-0"
+            style={{
+              clipPath,
+              backgroundColor: 'rgba(251, 146, 60, 0.50)',
+              zIndex: 5,
+            }}
+          />
+        )}
+
+        {/* Hint: destination point — green glow (where the piece should go) */}
+        {isHintTo && (
+          <div
+            className="absolute inset-0"
+            style={{
+              clipPath,
+              backgroundColor: 'rgba(52, 211, 153, 0.45)',
               zIndex: 5,
             }}
           />

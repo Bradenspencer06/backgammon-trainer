@@ -11,7 +11,7 @@ const RAIL   = '#2d1400'
 const FRAME  = '#3d1c00'
 const HOME_BG = '#162e1a'
 
-function Quadrant({ points, isTop, position, selectedPointNum, onPointClick }) {
+function Quadrant({ points, isTop, position, selectedPointNum, hintFromSet, hintToSet, onPointClick }) {
   return (
     <div className="flex h-full">
       {points.map(n => (
@@ -21,6 +21,8 @@ function Quadrant({ points, isTop, position, selectedPointNum, onPointClick }) {
           isTop={isTop}
           pointData={position[n]}
           isSelected={selectedPointNum === n}
+          isHintFrom={hintFromSet.has(n)}
+          isHintTo={hintToSet.has(n)}
           onClick={() => onPointClick(n)}
         />
       ))}
@@ -126,9 +128,17 @@ export default function Board({
   const position = pointsToPosition(gameState.game_state.points)
   const bar = gameState.game_state.bar
 
+  // Compute hint highlight sets from bestMoves (only valid board points 1–24)
+  const hintFromSet = new Set(
+    (hint?.bestMoves ?? []).map(m => m.from).filter(n => n >= 1 && n <= 24)
+  )
+  const hintToSet = new Set(
+    (hint?.bestMoves ?? []).map(m => m.to).filter(n => n >= 1 && n <= 24)
+  )
+
   const ROW_H = '10rem'
 
-  const quadrantProps = { position, selectedPointNum, onPointClick }
+  const quadrantProps = { position, selectedPointNum, hintFromSet, hintToSet, onPointClick }
 
   return (
     <div

@@ -61,11 +61,23 @@ export default function MoveHint({ bestMoves, playerWinPct, bestWinPct, explanat
             boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
           }}
         >
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span style={{ color: '#a78bfa', fontWeight: 700, fontSize: '0.7rem', letterSpacing: '0.1em' }}>
               BEST MOVE
             </span>
             <span style={{ color: '#e2e8f0', fontWeight: 700 }}>{moveStr}</span>
+            <span
+              style={{
+                fontSize: '0.65rem',
+                color: '#6b7280',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.25rem',
+              }}
+            >
+              <span style={{ color: '#fb923c' }}>■</span> from &nbsp;
+              <span style={{ color: '#34d399' }}>■</span> to — highlighted above
+            </span>
           </div>
 
           <div className="flex items-center gap-3">
