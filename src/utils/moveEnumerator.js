@@ -55,7 +55,7 @@ export function enumerateAllMoves(matchSnapshot) {
  */
 function _enumerate(snapshot, movesSoFar, results) {
   const player = snapshot.game_state.current_player_number
-  const hasDice = snapshot.game_state.dice.some(d => d.number !== null)
+  const hasDice = snapshot.game_state.dice.some(d => d.number !== null && !d.used)
   if (!hasDice) return
 
   // Sources to try: bar first (mandatory if pieces are on bar), then all points
@@ -125,9 +125,10 @@ function tryMove(snapshot, src, dst, player) {
 
   // --- Attempt the destination move ---
   const playerBefore = m1.gameState.currentPlayerNumber
+  // Count UNUSED dice — jbackgammon marks used dice with used:true, number stays set
   const diceCountBefore = m1.gameState.dice.dice
-    ? m1.gameState.dice.dice.filter(d => d.number !== null).length
-    : snapshot.game_state.dice.filter(d => d.number !== null).length
+    ? m1.gameState.dice.dice.filter(d => !d.used).length
+    : snapshot.game_state.dice.filter(d => !d.used).length
 
   if (dst === BEAR_OFF) {
     // Bear-off: try touching each of the 6 home-board points for the player
@@ -149,7 +150,7 @@ function tryMove(snapshot, src, dst, player) {
 
   // Check if a die was consumed (incomplete move)
   // We compare dice in the post-action state via asJson
-  const newDiceCount = m1.asJson.game_state.dice.filter(d => d.number !== null).length
+  const newDiceCount = m1.asJson.game_state.dice.filter(d => !d.used).length
   if (newDiceCount < diceCountBefore) {
     return { type: 'incomplete', snapshot: m1.asJson }
   }

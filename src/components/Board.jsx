@@ -225,7 +225,7 @@ export default function Board({
           playerWinPct={hint.playerWinPct}
           bestWinPct={hint.bestWinPct}
           explanation={hint.explanation}
-          currentPlayer={currentPlayer}
+          playerWhoMoved={hint.playerWhoMoved}
         />
       )}
     </div>

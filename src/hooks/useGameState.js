@@ -34,11 +34,10 @@ export function useGameState() {
   const [pendingSubmit, setPendingSubmit] = useState(false)
 
   // Persisted between dice roll and move completion
-  const preMoveWinProbRef   = useRef(null)   // winProb just before the player starts moving
-  const bestCandidateRef    = useRef(null)   // { winProb, moves } of the best available move
-  const hintTimerRef        = useRef(null)   // pending setTimeout for delayed hint display
+  const scoringPromiseRef   = useRef(null)   // Promise<{pre,best}> from rollDice — awaited at turn end
   const pendingWinProbRef   = useRef(null)   // winProb computed at turn-end, revealed on Submit
   const pendingDeltaRef     = useRef(null)   // delta computed at turn-end, revealed on Submit
+  const pendingHintRef      = useRef(null)   // hint computed at turn-end, revealed on Submit
 
   function sync() {
     setSnapshot({ ...matchRef.current.asJson })
@@ -56,40 +55,37 @@ export function useGameState() {
     match.touchDice(currentPlayer)
     sync()
 
-    const rolled = match.asJson
+    // Deep-clone so the snapshot is frozen — match.asJson shares object references
+    // that mutate as the match progresses, breaking async candidate scoring.
+    const rolled = JSON.parse(JSON.stringify(match.asJson))
+    const movingPlayer = currentPlayer
 
-    // Capture the win probability *before* any move is made
-    evaluatePosition(rolled.game_state).then(prob => {
-      preMoveWinProbRef.current = prob
+    // Clear state from previous turn immediately
+    pendingHintRef.current = null
+    pendingWinProbRef.current = null
+    pendingDeltaRef.current = null
+    setDelta(null)
+    setHint(null)
+    setPendingSubmit(false)
+
+    // Set scoringPromiseRef synchronously so _onTurnComplete can always await it,
+    // even if the player moves before the async eval resolves.
+    // Resolves to { pre, best } where pre = pre-move win prob, best = best candidate.
+    scoringPromiseRef.current = evaluatePosition(rolled.game_state).then(prob => {
       setWinProb(prob)
-      setDelta(null)
-      pendingWinProbRef.current = null
-      pendingDeltaRef.current = null
-      setPendingSubmit(false)
-      // Cancel any pending hint from the previous turn and clear it
-      if (hintTimerRef.current) {
-        clearTimeout(hintTimerRef.current)
-        hintTimerRef.current = null
-      }
-      setHint(null)
 
       // Enumerate all legal moves and score each one
       const candidates = enumerateAllMoves(rolled)
-      if (candidates.length === 0) {
-        bestCandidateRef.current = null
-        return
-      }
+      if (candidates.length === 0) return { pre: prob, best: null }
 
-      Promise.all(
+      return Promise.all(
         candidates.map(c => evaluatePosition(c.gameState).then(p => ({ ...c, evalProb: p })))
-      ).then(scored => {
-        // Best = highest Black win prob if Black is moving, lowest if White is moving
-        const best = scored.reduce((a, b) => {
-          if (currentPlayer === 1) return b.evalProb > a.evalProb ? b : a
-          else                     return b.evalProb < a.evalProb ? b : a
-        })
-        bestCandidateRef.current = best
-      })
+      ).then(scored => ({
+        pre: prob,
+        best: scored.reduce((a, b) =>
+          movingPlayer === 1 ? (b.evalProb > a.evalProb ? b : a) : (b.evalProb < a.evalProb ? b : a)
+        ),
+      }))
     })
   }
 
@@ -128,26 +124,24 @@ export function useGameState() {
   // ─── Submit (hand off to next player) ────────────────────────────────────────
 
   function submitTurn() {
-    // Reveal win% and delta now that the player has committed their turn
+    // Reveal win%, delta, and hint now that the player has committed their turn
     if (pendingWinProbRef.current !== null) setWinProb(pendingWinProbRef.current)
     if (pendingDeltaRef.current !== null) setDelta(pendingDeltaRef.current)
+    if (pendingHintRef.current !== null) setHint(pendingHintRef.current)
     pendingWinProbRef.current = null
     pendingDeltaRef.current = null
+    pendingHintRef.current = null
     setPendingSubmit(false)
   }
 
   // ─── Reset ───────────────────────────────────────────────────────────────────
 
   function resetGame() {
-    if (hintTimerRef.current) {
-      clearTimeout(hintTimerRef.current)
-      hintTimerRef.current = null
-    }
     matchRef.current = new Match({ ...INITIAL_MATCH_STATE, move_list: [] })
-    preMoveWinProbRef.current = null
-    bestCandidateRef.current = null
+    scoringPromiseRef.current = null
     pendingWinProbRef.current = null
     pendingDeltaRef.current = null
+    pendingHintRef.current = null
     setSnapshot({ ...matchRef.current.asJson })
     setWinProb(0.5)
     setDelta(null)
@@ -159,11 +153,22 @@ export function useGameState() {
 
   function _onTurnComplete(afterJson, playerWhoMoved) {
     setPendingSubmit(true)
-    evaluatePosition(afterJson.game_state).then(newProb => {
+
+    // Await both the post-move eval AND the candidate scoring (which may still be in-flight).
+    // scoringPromise resolves to { pre, best } or null.
+    const scoringPromise = scoringPromiseRef.current ?? Promise.resolve(null)
+    scoringPromiseRef.current = null
+
+    Promise.all([
+      evaluatePosition(afterJson.game_state),
+      scoringPromise,
+    ]).then(([newProb, scored]) => {
+      const pre  = scored?.pre  ?? null
+      const best = scored?.best ?? null
+
       // Store win% and delta in refs — revealed only when player clicks Submit
       pendingWinProbRef.current = newProb
 
-      const pre = preMoveWinProbRef.current
       if (pre !== null) {
         const rawDelta = playerWhoMoved === 1
           ? (newProb - pre) * 100
@@ -172,7 +177,6 @@ export function useGameState() {
       }
 
       // Compare to best available move
-      const best = bestCandidateRef.current
       if (best !== null) {
         const margin = playerWhoMoved === 1
           ? (best.evalProb - newProb) * 100
@@ -186,25 +190,20 @@ export function useGameState() {
               best.gameState,
               playerWhoMoved
             )
-            // Delay the hint so it appears as a post-turn coaching moment,
-            // not an immediate spoiler while the player is still processing
-            hintTimerRef.current = setTimeout(() => {
-              hintTimerRef.current = null
-              setHint({
-                bestMoves:    best.moves,
-                playerWinPct: newProb * 100,
-                bestWinPct:   best.evalProb * 100,
-                explanation,
-              })
-            }, 2000)
+            // Store hint in ref — revealed when player clicks Submit
+            pendingHintRef.current = {
+              bestMoves:      best.moves,
+              playerWinPct:   newProb * 100,
+              bestWinPct:     best.evalProb * 100,
+              explanation,
+              playerWhoMoved,
+            }
           })
         } else {
+          pendingHintRef.current = null
           setHint(null)
         }
       }
-
-      preMoveWinProbRef.current = null
-      bestCandidateRef.current  = null
     })
   }
 

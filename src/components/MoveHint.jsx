@@ -14,7 +14,7 @@ import { useState } from 'react'
  *   explanation  — string from explainDifference()
  *   currentPlayer — 1 or 2 (to orient win% labeling)
  */
-export default function MoveHint({ bestMoves, playerWinPct, bestWinPct, explanation, currentPlayer }) {
+export default function MoveHint({ bestMoves, playerWinPct, bestWinPct, explanation, playerWhoMoved }) {
   const [open, setOpen] = useState(false)
 
   if (!bestMoves || bestMoves.length === 0) return null
@@ -27,10 +27,10 @@ export default function MoveHint({ bestMoves, playerWinPct, bestWinPct, explanat
     })
     .join(', ')
 
-  // Label win% from the perspective of the current player
-  const label = currentPlayer === 1 ? 'Black' : 'White'
-  const playerPct = currentPlayer === 1 ? playerWinPct : 100 - playerWinPct
-  const bestPct   = currentPlayer === 1 ? bestWinPct   : 100 - bestWinPct
+  // Label win% from the perspective of the player who just moved
+  const label = playerWhoMoved === 1 ? 'Black' : 'White'
+  const playerPct = playerWhoMoved === 1 ? playerWinPct : 100 - playerWinPct
+  const bestPct   = playerWhoMoved === 1 ? bestWinPct   : 100 - bestWinPct
 
   return (
     <div className="flex flex-col items-end" style={{ maxWidth: '56rem', width: '100%' }}>
