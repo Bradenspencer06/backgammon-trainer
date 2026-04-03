@@ -1,5 +1,6 @@
 import Board from './components/Board'
 import OpeningRoll from './components/OpeningRoll'
+import GoodMoveToast from './components/GoodMoveToast'
 import { useGameState } from './hooks/useGameState'
 
 export default function App() {
@@ -15,6 +16,8 @@ export default function App() {
     winProb,
     delta,
     hint,
+    goodMove,
+    clearGoodMove,
     pendingSubmit,
     openingRoll,
     rollOpeningDie,
@@ -38,6 +41,8 @@ export default function App() {
   }
 
   return (
+    <>
+    <GoodMoveToast goodMove={goodMove} onDismiss={clearGoodMove} />
     <Board
       gameState={gameState}
       selectedPointNum={selectedPointNum}
@@ -57,5 +62,6 @@ export default function App() {
       onSubmit={submitTurn}
       onReset={resetGame}
     />
+    </>
   )
 }

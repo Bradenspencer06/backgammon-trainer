@@ -45,12 +45,14 @@ export function useGameState() {
   const [delta, setDelta]           = useState(null)
   const [hint, setHint]             = useState(null)
   const [pendingSubmit, setPendingSubmit] = useState(false)
+  const [goodMove, setGoodMove]           = useState(null)   // { winPct, label } | null
 
   // Persisted between dice roll and move completion
   const scoringPromiseRef   = useRef(null)   // Promise<{pre,best}> from rollDice — awaited at turn end
   const pendingWinProbRef   = useRef(null)   // winProb computed at turn-end, revealed on Submit
   const pendingDeltaRef     = useRef(null)   // delta computed at turn-end, revealed on Submit
   const pendingHintRef      = useRef(null)   // hint computed at turn-end, revealed on Submit
+  const pendingGoodMoveRef  = useRef(null)   // good-move celebration, revealed on Submit
 
   function sync() {
     setSnapshot({ ...matchRef.current.asJson })
@@ -119,10 +121,12 @@ export function useGameState() {
 
     // Clear state from previous turn immediately
     pendingHintRef.current = null
+    pendingGoodMoveRef.current = null
     pendingWinProbRef.current = null
     pendingDeltaRef.current = null
     setDelta(null)
     setHint(null)
+    setGoodMove(null)
     setPendingSubmit(false)
 
     // Set scoringPromiseRef synchronously so _onTurnComplete can always await it,
@@ -182,13 +186,15 @@ export function useGameState() {
   // ─── Submit (hand off to next player) ────────────────────────────────────────
 
   function submitTurn() {
-    // Reveal win%, delta, and hint now that the player has committed their turn
+    // Reveal win%, delta, hint, and good-move celebration
     if (pendingWinProbRef.current !== null) setWinProb(pendingWinProbRef.current)
     if (pendingDeltaRef.current !== null) setDelta(pendingDeltaRef.current)
     if (pendingHintRef.current !== null) setHint(pendingHintRef.current)
+    if (pendingGoodMoveRef.current !== null) setGoodMove(pendingGoodMoveRef.current)
     pendingWinProbRef.current = null
     pendingDeltaRef.current = null
     pendingHintRef.current = null
+    pendingGoodMoveRef.current = null
     setPendingSubmit(false)
   }
 
@@ -204,6 +210,7 @@ export function useGameState() {
     setWinProb(0.5)
     setDelta(null)
     setHint(null)
+    setGoodMove(null)
     setPendingSubmit(false)
     setOpeningRoll({ ...OPENING_ROLL_INIT })
   }
@@ -263,8 +270,14 @@ export function useGameState() {
             }
           })
         } else {
+          // Player made the optimal (or near-optimal) move — queue celebration
           pendingHintRef.current = null
           setHint(null)
+          const playerPct = playerWhoMoved === 1 ? newProb * 100 : (1 - newProb) * 100
+          pendingGoodMoveRef.current = {
+            winPct: playerPct,
+            label:  playerWhoMoved === 1 ? 'Black' : 'White',
+          }
         }
       }
     })
@@ -286,6 +299,8 @@ export function useGameState() {
     winProb,
     delta,
     hint,
+    goodMove,
+    clearGoodMove: () => setGoodMove(null),
     pendingSubmit,
     rollDice,
     touchPoint,
