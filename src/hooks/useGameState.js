@@ -53,6 +53,7 @@ export function useGameState() {
   const pendingDeltaRef     = useRef(null)   // delta computed at turn-end, revealed on Submit
   const pendingHintRef      = useRef(null)   // hint computed at turn-end, revealed on Submit
   const pendingGoodMoveRef  = useRef(null)   // good-move celebration, revealed on Submit
+  const moveHistoryRef      = useRef([])     // stack of snapshots for undo (one per consumed die)
 
   function sync() {
     setSnapshot({ ...matchRef.current.asJson })
@@ -124,6 +125,7 @@ export function useGameState() {
     pendingGoodMoveRef.current = null
     pendingWinProbRef.current = null
     pendingDeltaRef.current = null
+    moveHistoryRef.current = []
     setDelta(null)
     setHint(null)
     setGoodMove(null)
@@ -156,17 +158,27 @@ export function useGameState() {
   // to 'roll'). If it has, we compute the post-move training feedback.
 
   function touchPoint(pointNumber) {
-    const phaseBefore = gs.currentPhase
-    const playerBefore = gs.currentPlayerNumber
+    const phaseBefore    = gs.currentPhase
+    const playerBefore   = gs.currentPlayerNumber
+    const diceCountBefore = match.asJson.game_state.dice.filter(d => !d.used).length
+    // Snapshot BEFORE this move — saved only if a die gets consumed
+    const snapshotBefore = JSON.parse(JSON.stringify(match.asJson))
 
     match.touchPoint(pointNumber, currentPlayer)
 
-    const afterJson = match.asJson
-    const phaseAfter = afterJson.game_state.current_phase
+    const afterJson      = match.asJson
+    const phaseAfter     = afterJson.game_state.current_phase
+    const diceCountAfter = afterJson.game_state.dice.filter(d => !d.used).length
     sync()
 
-    // Turn ended when phase returns to 'roll'
-    const turnEnded = phaseBefore === 'move' && phaseAfter === 'roll'
+    // A die was consumed → a real move happened (not just source selection)
+    const dieConsumed = diceCountAfter < diceCountBefore
+    const turnEnded   = phaseBefore === 'move' && phaseAfter === 'roll'
+
+    if (dieConsumed || turnEnded) {
+      moveHistoryRef.current = [...moveHistoryRef.current, snapshotBefore]
+    }
+
     if (turnEnded) {
       _onTurnComplete(afterJson, playerBefore)
     }
@@ -183,6 +195,30 @@ export function useGameState() {
     _onTurnComplete(afterJson, playerBefore)
   }
 
+  // ─── Undo ────────────────────────────────────────────────────────────────────
+
+  function undoMove() {
+    if (moveHistoryRef.current.length === 0) return
+    const prev = moveHistoryRef.current[moveHistoryRef.current.length - 1]
+    moveHistoryRef.current = moveHistoryRef.current.slice(0, -1)
+
+    // Rebuild the match from the saved snapshot
+    matchRef.current = new Match({ ...prev, move_list: [] })
+    sync()
+
+    // If the turn had ended, roll back the pending training state too
+    if (pendingSubmit) {
+      scoringPromiseRef.current  = null
+      pendingWinProbRef.current  = null
+      pendingDeltaRef.current    = null
+      pendingHintRef.current     = null
+      pendingGoodMoveRef.current = null
+      setPendingSubmit(false)
+      setHint(null)
+      setGoodMove(null)
+    }
+  }
+
   // ─── Submit (hand off to next player) ────────────────────────────────────────
 
   function submitTurn() {
@@ -195,6 +231,7 @@ export function useGameState() {
     pendingDeltaRef.current = null
     pendingHintRef.current = null
     pendingGoodMoveRef.current = null
+    moveHistoryRef.current = []
     setPendingSubmit(false)
   }
 
@@ -206,6 +243,7 @@ export function useGameState() {
     pendingWinProbRef.current = null
     pendingDeltaRef.current = null
     pendingHintRef.current = null
+    moveHistoryRef.current = []
     setSnapshot({ ...matchRef.current.asJson })
     setWinProb(0.5)
     setDelta(null)
@@ -295,6 +333,9 @@ export function useGameState() {
     // Opening roll
     openingRoll,
     rollOpeningDie,
+    // Undo
+    canUndo: moveHistoryRef.current.length > 0,
+    undoMove,
     // Training layer
     winProb,
     delta,

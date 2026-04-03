@@ -116,9 +116,11 @@ export default function Board({
   delta,
   hint,
   pendingSubmit,
+  canUndo,
   onPointClick,
   onRoll,
   onPass,
+  onUndo,
   onSubmit,
   onReset,
 }) {
@@ -206,7 +208,7 @@ export default function Board({
       </div>
 
       {/* ── Dice + Roll button ── */}
-      <Dice dice={dice} phase={phase} pendingSubmit={pendingSubmit} onRoll={onRoll} onSubmit={onSubmit} />
+      <Dice dice={dice} phase={phase} pendingSubmit={pendingSubmit} canUndo={canUndo} onRoll={onRoll} onUndo={onUndo} onSubmit={onSubmit} />
 
       {/* ── Status bar ── */}
       <GameStatus

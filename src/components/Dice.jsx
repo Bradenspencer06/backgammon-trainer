@@ -52,7 +52,7 @@ function Die({ value }) {
  * phase:     'roll' | 'move'
  * onRoll:    called when the Roll button is clicked
  */
-export default function Dice({ dice = [], phase, pendingSubmit, onRoll, onSubmit }) {
+export default function Dice({ dice = [], phase, pendingSubmit, canUndo, onRoll, onSubmit, onUndo }) {
   const [d1, d2] = dice
   const showRoll = phase === 'roll' && !pendingSubmit
 
@@ -63,6 +63,7 @@ export default function Dice({ dice = [], phase, pendingSubmit, onRoll, onSubmit
         <Die value={d1?.number ?? null} />
         <Die value={d2?.number ?? null} />
       </div>
+
       {showRoll && (
         <button
           onClick={onRoll}
@@ -77,19 +78,39 @@ export default function Dice({ dice = [], phase, pendingSubmit, onRoll, onSubmit
           Roll Dice
         </button>
       )}
-      {pendingSubmit && (
-        <button
-          onClick={onSubmit}
-          className="px-6 py-2 rounded-lg text-sm font-mono font-bold uppercase tracking-widest"
-          style={{
-            backgroundColor: '#4c1d95',
-            color: '#ede9fe',
-            border: '1px solid #7c3aed',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
-          }}
-        >
-          Submit Turn
-        </button>
+
+      {/* Move phase — undo + submit side by side */}
+      {(phase === 'move' || pendingSubmit) && (
+        <div className="flex items-center gap-3">
+          {canUndo && (
+            <button
+              onClick={onUndo}
+              className="px-4 py-2 rounded-lg text-sm font-mono font-bold uppercase tracking-widest"
+              style={{
+                backgroundColor: '#1c1917',
+                color: '#a8a29e',
+                border: '1px solid #44403c',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+              }}
+            >
+              ↩ Undo
+            </button>
+          )}
+          {pendingSubmit && (
+            <button
+              onClick={onSubmit}
+              className="px-6 py-2 rounded-lg text-sm font-mono font-bold uppercase tracking-widest"
+              style={{
+                backgroundColor: '#4c1d95',
+                color: '#ede9fe',
+                border: '1px solid #7c3aed',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+              }}
+            >
+              Submit Turn
+            </button>
+          )}
+        </div>
       )}
     </div>
   )

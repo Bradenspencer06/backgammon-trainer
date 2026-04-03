@@ -19,6 +19,8 @@ export default function App() {
     goodMove,
     clearGoodMove,
     pendingSubmit,
+    canUndo,
+    undoMove,
     openingRoll,
     rollOpeningDie,
     rollDice,
@@ -56,9 +58,11 @@ export default function App() {
       delta={delta}
       hint={hint}
       pendingSubmit={pendingSubmit}
+      canUndo={canUndo}
       onPointClick={touchPoint}
       onRoll={rollDice}
       onPass={touchPass}
+      onUndo={undoMove}
       onSubmit={submitTurn}
       onReset={resetGame}
     />
