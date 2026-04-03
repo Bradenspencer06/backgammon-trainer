@@ -104,13 +104,14 @@ export default function OpeningRoll({ blackDie, whiteDie, tie, onRoll, onReset }
 
   let statusText  = 'Each player rolls — highest die goes first'
   let statusColor = '#6b7280'
+  let winnerLabel = null
 
   if (tie) {
     statusText  = "It's a tie! Rolling again…"
     statusColor = '#f59e0b'
   } else if (bothRolled) {
-    const winner = blackDie > whiteDie ? 'Black' : 'White'
-    statusText  = `${winner} goes first!`
+    winnerLabel = blackDie > whiteDie ? 'Black' : 'White'
+    statusText  = `${winnerLabel} rolled higher — starting the game…`
     statusColor = '#34d399'
   } else if (blackDie !== null || whiteDie !== null) {
     statusText  = 'Waiting for the other player…'
@@ -173,17 +174,50 @@ export default function OpeningRoll({ blackDie, whiteDie, tie, onRoll, onReset }
           />
         </div>
 
+        {/* Winner banner — shown for the 2s countdown before game starts */}
+        {winnerLabel && (
+          <div
+            className="flex flex-col items-center gap-1"
+            style={{ animation: 'winnerPop 0.35s cubic-bezier(0.34,1.56,0.64,1)' }}
+          >
+            <p style={{ fontFamily: 'monospace', fontSize: '0.65rem', color: '#6b7280', letterSpacing: '0.15em' }}>
+              WINNER
+            </p>
+            <p style={{
+              fontFamily:  'Georgia, serif',
+              fontSize:    '2rem',
+              fontWeight:  700,
+              color:       '#34d399',
+              letterSpacing: '0.05em',
+            }}>
+              {winnerLabel}!
+            </p>
+            <p style={{ fontFamily: 'monospace', fontSize: '0.65rem', color: '#6b7280' }}>
+              Starting game…
+            </p>
+          </div>
+        )}
+
         {/* Status message */}
-        <p
-          className="text-sm font-mono text-center"
-          style={{
-            color: statusColor,
-            minHeight: '1.4em',
-            transition: 'color 0.3s ease',
-          }}
-        >
-          {statusText}
-        </p>
+        {!winnerLabel && (
+          <p
+            className="text-sm font-mono text-center"
+            style={{
+              color: statusColor,
+              minHeight: '1.4em',
+              transition: 'color 0.3s ease',
+            }}
+          >
+            {statusText}
+          </p>
+        )}
+
+        <style>{`
+          @keyframes winnerPop {
+            from { transform: scale(0.7); opacity: 0; }
+            to   { transform: scale(1);   opacity: 1; }
+          }
+        `}</style>
       </div>
     </div>
   )

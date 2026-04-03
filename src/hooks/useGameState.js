@@ -76,25 +76,28 @@ export function useGameState() {
         setOpeningRoll({ blackDie, whiteDie, tie: true, complete: false })
         setTimeout(() => setOpeningRoll({ ...OPENING_ROLL_INIT }), 1500)
       } else {
-        // Winner determined — build Match in move phase with both dice
-        const winner   = blackDie > whiteDie ? 1 : 2
+        // Winner determined — show both dice for 2s then start the game
+        const winner    = blackDie > whiteDie ? 1 : 2
         const winnerDie = winner === 1 ? blackDie : whiteDie
         const loserDie  = winner === 1 ? whiteDie : blackDie
-        matchRef.current = new Match({
-          ...INITIAL_MATCH_STATE,
-          move_list: [],
-          game_state: {
-            ...INITIAL_MATCH_STATE.game_state,
-            current_player_number: winner,
-            current_phase: 'move',
-            dice: [
-              { number: winnerDie, used: false },
-              { number: loserDie,  used: false },
-            ],
-          },
-        })
-        setSnapshot({ ...matchRef.current.asJson })
-        setOpeningRoll({ blackDie, whiteDie, tie: false, complete: true })
+        setOpeningRoll({ blackDie, whiteDie, tie: false, complete: false })
+        setTimeout(() => {
+          matchRef.current = new Match({
+            ...INITIAL_MATCH_STATE,
+            move_list: [],
+            game_state: {
+              ...INITIAL_MATCH_STATE.game_state,
+              current_player_number: winner,
+              current_phase: 'move',
+              dice: [
+                { number: winnerDie, used: false },
+                { number: loserDie,  used: false },
+              ],
+            },
+          })
+          setSnapshot({ ...matchRef.current.asJson })
+          setOpeningRoll({ blackDie, whiteDie, tie: false, complete: true })
+        }, 2200)
       }
     } else {
       setOpeningRoll({ blackDie, whiteDie, tie: false, complete: false })
