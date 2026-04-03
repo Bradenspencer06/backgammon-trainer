@@ -47,14 +47,16 @@ export function explainDifference(worseGs, betterGs, playerNumber) {
   const pipDelta     = sign * (totalPips(betterGs, 2) - totalPips(worseGs, 2)
                              - totalPips(betterGs, 1) + totalPips(worseGs, 1))
   const blotDelta    = sign * (countBlots(worseGs, playerNumber) - countBlots(betterGs, playerNumber))
+  const shotDelta    = sign * (countDirectShots(worseGs, playerNumber) - countDirectShots(betterGs, playerNumber))
   const homeDelta    = sign * (countHomePoints(betterGs, playerNumber) - countHomePoints(worseGs, playerNumber))
   const primeDelta   = sign * (longestPrime(betterGs, playerNumber) - longestPrime(worseGs, playerNumber))
   const anchorDelta  = sign * (countAnchors(betterGs, playerNumber) - countAnchors(worseGs, playerNumber))
 
   // Return the most significant reason — written for beginners, no jargon
   const reasons = [
-    [Math.abs(pipDelta),     pipDelta > 0    && `Moves your pieces further ahead — every step closer to home counts`],
+    [Math.abs(shotDelta)*5,  shotDelta > 0   && `Your piece was left wide open — your opponent had an easy shot to knock it off the board`],
     [Math.abs(blotDelta)*3,  blotDelta > 0   && `Keeps your pieces safer — fewer lone pieces that your opponent can knock off`],
+    [Math.abs(pipDelta),     pipDelta > 0    && `Moves your pieces further ahead — every step closer to home counts`],
     [Math.abs(homeDelta)*2,  homeDelta > 0   && `Locks down a point in your home board, making it harder for your opponent to come back in`],
     [Math.abs(primeDelta)*4, primeDelta > 0  && `Builds a longer wall of points, making it very hard for your opponent's pieces to get past`],
     [Math.abs(anchorDelta)*3,anchorDelta > 0 && `Holds a strong defensive position deep in your opponent's home board`],
@@ -78,27 +80,31 @@ function heuristicEval(gs) {
   // Normalised to [-1, +1]; positive = Black is ahead
   const pipScore = total > 0 ? (whitePips - blackPips) / total : 0
 
-  // ── 2. Blot exposure ──────────────────────────────────────────────────────
-  const blotScore = (countBlots(gs, 2) - countBlots(gs, 1)) * 0.018
+  // ── 2. Direct shots — most critical danger signal ─────────────────────────
+  // Counts how many opponent pieces can hit each blot in a single move (1–6 away).
+  // A piece on 21 with white on 23 and 24 is hit by 4 pieces = very dangerous.
+  const shotScore = (countDirectShots(gs, 2) - countDirectShots(gs, 1)) * 0.055
 
-  // ── 3. Home-board structure ───────────────────────────────────────────────
-  const homeScore = (countHomePoints(gs, 1) - countHomePoints(gs, 2)) * 0.014
+  // ── 3. Raw blot count (secondary — proximity-unaware) ─────────────────────
+  const blotScore = (countBlots(gs, 2) - countBlots(gs, 1)) * 0.025
 
-  // ── 4. Priming ────────────────────────────────────────────────────────────
-  const primeScore = (longestPrime(gs, 1) - longestPrime(gs, 2)) * 0.012
+  // ── 4. Home-board structure ───────────────────────────────────────────────
+  const homeScore = (countHomePoints(gs, 1) - countHomePoints(gs, 2)) * 0.018
 
-  // ── 5. Anchors ────────────────────────────────────────────────────────────
-  const anchorScore = (countAnchors(gs, 1) - countAnchors(gs, 2)) * 0.014
+  // ── 5. Priming ────────────────────────────────────────────────────────────
+  const primeScore = (longestPrime(gs, 1) - longestPrime(gs, 2)) * 0.016
 
-  // ── 6. Bar penalty ────────────────────────────────────────────────────────
+  // ── 6. Anchors ────────────────────────────────────────────────────────────
+  const anchorScore = (countAnchors(gs, 1) - countAnchors(gs, 2)) * 0.018
+
+  // ── 7. Bar penalty ────────────────────────────────────────────────────────
   const barBlack = barCount(gs, 1)
   const barWhite = barCount(gs, 2)
-  // Being on the bar with opponent's home board closed is very bad
-  const blackHomeClosed = countHomePoints(gs, 2)  // White's home points = Black's re-entry obstacles
+  const blackHomeClosed = countHomePoints(gs, 2)
   const whiteHomeClosed = countHomePoints(gs, 1)
-  const barScore = (barWhite * (1 + blackHomeClosed * 0.1) - barBlack * (1 + whiteHomeClosed * 0.1)) * 0.03
+  const barScore = (barWhite * (1 + blackHomeClosed * 0.1) - barBlack * (1 + whiteHomeClosed * 0.1)) * 0.04
 
-  const raw = pipScore * 3.2 + blotScore + homeScore + primeScore + anchorScore + barScore
+  const raw = pipScore * 3.2 + shotScore + blotScore + homeScore + primeScore + anchorScore + barScore
   return sigmoid(raw)
 }
 
@@ -134,6 +140,52 @@ function countBlots(gs, playerNumber) {
     const mine = pt.pieces.filter(p => p.player_number === playerNumber).length
     return mine === 1
   }).length
+}
+
+/**
+ * Count how many opponent pieces have a direct shot on any of the player's blots.
+ *
+ * A "direct shot" means the opponent piece is exactly 1–6 pips away IN THE
+ * DIRECTION IT MOVES and can land on an unprotected blot in one move.
+ *
+ * White (2) moves 24→1, so a white piece at point W threatens a black blot at
+ * point B when W > B and (W - B) is 1–6.
+ *
+ * Black (1) moves 1→24, so a black piece at point B threatens a white blot at
+ * point W when B < W and (W - B) is 1–6.
+ *
+ * Each piece on a threatening point counts individually (2 pieces = 2 shots).
+ * Bar pieces are ignored (they must enter in the home board first).
+ */
+function countDirectShots(gs, playerNumber) {
+  const opponent = playerNumber === 1 ? 2 : 1
+
+  // Blots belonging to playerNumber
+  const blots = gs.points
+    .filter(pt => pt.pieces.filter(p => p.player_number === playerNumber).length === 1)
+    .map(pt => pt.number)
+
+  if (blots.length === 0) return 0
+
+  // Opponent pieces on the board (not bar)
+  const oppPieces = gs.points.map(pt => ({
+    number: pt.number,
+    count:  pt.pieces.filter(p => p.player_number === opponent).length,
+  })).filter(p => p.count > 0)
+
+  let shots = 0
+  for (const blot of blots) {
+    for (const opp of oppPieces) {
+      // Distance in the direction the opponent moves
+      const dist = opponent === 2
+        ? opp.number - blot   // White moves downward: must be above the blot
+        : blot - opp.number   // Black moves upward:   must be below the blot
+      if (dist >= 1 && dist <= 6) {
+        shots += opp.count
+      }
+    }
+  }
+  return shots
 }
 
 /**

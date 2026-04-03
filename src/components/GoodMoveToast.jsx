@@ -5,18 +5,18 @@
 import { useEffect, useState, useRef } from 'react'
 
 const MESSAGES = [
-  { emoji: '🎯', text: 'Perfect move!' },
-  { emoji: '🔥', text: 'On fire!'      },
-  { emoji: '⚡', text: 'Nailed it!'    },
-  { emoji: '💪', text: 'Great play!'  },
-  { emoji: '✨', text: 'Spot on!'      },
-  { emoji: '🏆', text: 'Best move!'   },
+  'Perfect move!',
+  'Best move!',
+  'Nailed it!',
+  'Great play!',
+  'Spot on!',
+  'Top choice!',
 ]
 
 export default function GoodMoveToast({ goodMove, onDismiss }) {
   const [visible, setVisible] = useState(false)
   const [leaving, setLeaving] = useState(false)
-  const msgRef = useRef(MESSAGES[Math.floor(Math.random() * MESSAGES.length)])
+  const msgRef = useRef(MESSAGES[0])
   const timerRef = useRef(null)
 
   useEffect(() => {
@@ -27,6 +27,7 @@ export default function GoodMoveToast({ goodMove, onDismiss }) {
     }
     // Pick a fresh message each time
     msgRef.current = MESSAGES[Math.floor(Math.random() * MESSAGES.length)]
+
     setLeaving(false)
     setVisible(true)
 
@@ -41,8 +42,6 @@ export default function GoodMoveToast({ goodMove, onDismiss }) {
 
   if (!visible || !goodMove) return null
 
-  const { emoji, text } = msgRef.current
-
   return (
     <div
       onClick={() => { setLeaving(true); setTimeout(onDismiss, 400) }}
@@ -53,7 +52,7 @@ export default function GoodMoveToast({ goodMove, onDismiss }) {
         display:         'flex',
         alignItems:      'center',
         justifyContent:  'center',
-        pointerEvents:   'none',   // don't block clicks through the bg
+        pointerEvents:   'none',
       }}
     >
       <div
@@ -62,28 +61,26 @@ export default function GoodMoveToast({ goodMove, onDismiss }) {
           display:         'flex',
           flexDirection:   'column',
           alignItems:      'center',
-          gap:             '0.4rem',
+          gap:             '0.5rem',
           backgroundColor: '#052e16',
           border:          '2px solid #16a34a',
           borderRadius:    20,
-          padding:         '1.5rem 2.5rem',
+          padding:         '1.75rem 3rem',
           boxShadow:       '0 0 40px rgba(34,197,94,0.45), 0 8px 32px rgba(0,0,0,0.6)',
           animation:       leaving
             ? 'toastOut 0.4s ease forwards'
             : 'toastIn 0.4s cubic-bezier(0.34,1.56,0.64,1) forwards',
         }}
       >
-        <span style={{ fontSize: '3rem', lineHeight: 1 }}>{emoji}</span>
-
         <p style={{
           fontFamily:    'Georgia, serif',
-          fontSize:      '1.5rem',
+          fontSize:      '1.75rem',
           fontWeight:    700,
           color:         '#4ade80',
           letterSpacing: '0.02em',
           margin:        0,
         }}>
-          {text}
+          {msgRef.current}
         </p>
 
         <p style={{
