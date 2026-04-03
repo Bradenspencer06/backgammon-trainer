@@ -139,6 +139,7 @@ export function useGameState() {
         best: scored.reduce((a, b) =>
           movingPlayer === 1 ? (b.evalProb > a.evalProb ? b : a) : (b.evalProb < a.evalProb ? b : a)
         ),
+        beforeGameState: rolled.game_state,
       }))
     })
   }
@@ -232,6 +233,8 @@ export function useGameState() {
       }
 
       // Compare to best available move
+      const beforeGameState = scored?.beforeGameState ?? null
+
       if (best !== null) {
         const margin = playerWhoMoved === 1
           ? (best.evalProb - newProb) * 100
@@ -252,6 +255,8 @@ export function useGameState() {
               bestWinPct:     best.evalProb * 100,
               explanation,
               playerWhoMoved,
+              beforeGameState,
+              afterGameState: best.gameState,
             }
           })
         } else {

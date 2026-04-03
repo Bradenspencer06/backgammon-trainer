@@ -51,20 +51,20 @@ export function explainDifference(worseGs, betterGs, playerNumber) {
   const primeDelta   = sign * (longestPrime(betterGs, playerNumber) - longestPrime(worseGs, playerNumber))
   const anchorDelta  = sign * (countAnchors(betterGs, playerNumber) - countAnchors(worseGs, playerNumber))
 
-  // Return the most significant reason
+  // Return the most significant reason — written for beginners, no jargon
   const reasons = [
-    [Math.abs(pipDelta),    pipDelta > 0    && `Gains ${Math.round(pipDelta)} pip${Math.abs(pipDelta) !== 1 ? 's' : ''} on the pip count`],
-    [Math.abs(blotDelta)*3, blotDelta > 0   && `Leaves ${blotDelta} fewer blot${blotDelta !== 1 ? 's' : ''} exposed`],
-    [Math.abs(homeDelta)*2, homeDelta > 0   && `Closes an additional home-board point`],
-    [Math.abs(primeDelta)*4,primeDelta > 0  && `Extends the prime to ${longestPrime(betterGs, playerNumber)} consecutive points`],
-    [Math.abs(anchorDelta)*3,anchorDelta > 0 && `Establishes a stronger anchor`],
+    [Math.abs(pipDelta),     pipDelta > 0    && `Moves your pieces further ahead — every step closer to home counts`],
+    [Math.abs(blotDelta)*3,  blotDelta > 0   && `Keeps your pieces safer — fewer lone pieces that your opponent can knock off`],
+    [Math.abs(homeDelta)*2,  homeDelta > 0   && `Locks down a point in your home board, making it harder for your opponent to come back in`],
+    [Math.abs(primeDelta)*4, primeDelta > 0  && `Builds a longer wall of points, making it very hard for your opponent's pieces to get past`],
+    [Math.abs(anchorDelta)*3,anchorDelta > 0 && `Holds a strong defensive position deep in your opponent's home board`],
   ]
     .filter(([, msg]) => msg)
     .sort(([a], [b]) => b - a)
 
   return reasons.length > 0
     ? reasons[0][1]
-    : 'Maintains a marginally better overall structure'
+    : 'Builds a slightly stronger overall position'
 }
 
 // ─── Heuristic Implementation (private) ──────────────────────────────────────

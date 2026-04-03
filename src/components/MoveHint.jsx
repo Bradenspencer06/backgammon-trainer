@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import MiniBoardDemo from './MiniBoardDemo'
 
 /**
  * MoveHint — lightbulb icon that appears only when the player made a suboptimal move.
@@ -14,7 +15,7 @@ import { useState } from 'react'
  *   explanation  — string from explainDifference()
  *   currentPlayer — 1 or 2 (to orient win% labeling)
  */
-export default function MoveHint({ bestMoves, playerWinPct, bestWinPct, explanation, playerWhoMoved }) {
+export default function MoveHint({ bestMoves, playerWinPct, bestWinPct, explanation, playerWhoMoved, beforeGameState, afterGameState }) {
   const [open, setOpen] = useState(false)
 
   if (!bestMoves || bestMoves.length === 0) return null
@@ -61,26 +62,8 @@ export default function MoveHint({ bestMoves, playerWinPct, bestWinPct, explanat
             boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
           }}
         >
-          <div className="flex items-center gap-2 flex-wrap">
-            <span style={{ color: '#a78bfa', fontWeight: 700, fontSize: '0.7rem', letterSpacing: '0.1em' }}>
-              BEST MOVE
-            </span>
-            <span style={{ color: '#e2e8f0', fontWeight: 700 }}>{moveStr}</span>
-            <span
-              style={{
-                fontSize: '0.65rem',
-                color: '#6b7280',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.25rem',
-              }}
-            >
-              <span style={{ color: '#fb923c' }}>■</span> from &nbsp;
-              <span style={{ color: '#34d399' }}>■</span> to — highlighted above
-            </span>
-          </div>
-
-          <div className="flex items-center gap-3">
+          {/* Win% comparison */}
+          <div className="flex items-center gap-3 flex-wrap">
             <span style={{ color: '#9ca3af' }}>Your move:</span>
             <span style={{ color: '#f87171', fontWeight: 700 }}>{label} {playerPct.toFixed(1)}%</span>
             <span style={{ color: '#6b7280' }}>→</span>
@@ -88,9 +71,24 @@ export default function MoveHint({ bestMoves, playerWinPct, bestWinPct, explanat
             <span style={{ color: '#4ade80', fontWeight: 700 }}>{label} {bestPct.toFixed(1)}%</span>
           </div>
 
+          {/* Plain English explanation */}
           {explanation && (
             <div style={{ color: '#d1d5db', lineHeight: '1.5', borderTop: '1px solid #292524', paddingTop: '0.5rem' }}>
               {explanation}
+            </div>
+          )}
+
+          {/* Animated mini board showing the best move */}
+          {beforeGameState && afterGameState && (
+            <div style={{ borderTop: '1px solid #292524', paddingTop: '0.75rem' }}>
+              <p style={{ color: '#6b7280', fontSize: '0.65rem', marginBottom: '0.5rem', fontFamily: 'monospace', letterSpacing: '0.08em' }}>
+                WHAT YOU SHOULD HAVE DONE:
+              </p>
+              <MiniBoardDemo
+                beforeState={beforeGameState}
+                afterState={afterGameState}
+                bestMoves={bestMoves}
+              />
             </div>
           )}
         </div>
