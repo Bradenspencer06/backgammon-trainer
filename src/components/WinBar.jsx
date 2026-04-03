@@ -63,7 +63,7 @@ function DeltaPill({ delta }) {
     timerRef.current = setTimeout(() => {
       setFading(true)
       setTimeout(() => setVisible(false), 600)
-    }, 5000)
+    }, 4500)
 
     return () => clearTimeout(timerRef.current)
   }, [delta])
