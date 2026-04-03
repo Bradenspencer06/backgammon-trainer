@@ -3,7 +3,7 @@
  * Displays whose turn it is, the current phase, any notification from
  * the library, and a Pass button when the player has no legal moves.
  */
-export default function GameStatus({ currentPlayer, phase, notification, passable, winner, onPass }) {
+export default function GameStatus({ currentPlayer, phase, notification, passable, winner, aiThinking, onPass }) {
   const playerName  = currentPlayer === 1 ? 'Black' : 'White'
   const playerColor = currentPlayer === 1 ? '#1c1c1c' : '#f0ebe0'
   const playerBg    = currentPlayer === 1 ? '#f0ebe0' : '#1c1c1c'
@@ -24,7 +24,11 @@ export default function GameStatus({ currentPlayer, phase, notification, passabl
       {/* Current player pill */}
       <div
         className="flex items-center gap-2 px-4 py-1 rounded-full"
-        style={{ backgroundColor: playerBg, border: '1px solid #555' }}
+        style={{
+          backgroundColor: playerBg,
+          border: `1px solid ${aiThinking ? '#3b82f6' : '#555'}`,
+          transition: 'border-color 0.3s',
+        }}
       >
         <div
           className="w-3 h-3 rounded-full border"
@@ -37,9 +41,30 @@ export default function GameStatus({ currentPlayer, phase, notification, passabl
           className="text-sm font-mono font-bold tracking-widest uppercase"
           style={{ color: playerColor }}
         >
-          {playerName} — {phase === 'roll' ? 'Roll dice' : 'Move'}
+          {aiThinking ? 'AI thinking…' : `${playerName} — ${phase === 'roll' ? 'Roll dice' : 'Move'}`}
         </span>
+        {aiThinking && (
+          <span style={{ display: 'flex', gap: 3 }}>
+            {[0, 1, 2].map(i => (
+              <span
+                key={i}
+                style={{
+                  width: 4, height: 4, borderRadius: '50%',
+                  backgroundColor: playerColor,
+                  animation: `aiDot 1.2s ease-in-out ${i * 0.2}s infinite`,
+                  display: 'inline-block',
+                }}
+              />
+            ))}
+          </span>
+        )}
       </div>
+      <style>{`
+        @keyframes aiDot {
+          0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); }
+          40%            { opacity: 1;   transform: scale(1.2); }
+        }
+      `}</style>
 
       {/* Library notification */}
       {notification && (

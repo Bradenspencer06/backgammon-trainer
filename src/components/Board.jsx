@@ -117,6 +117,7 @@ export default function Board({
   hint,
   pendingSubmit,
   canUndo,
+  aiThinking,
   onPointClick,
   onRoll,
   onPass,
@@ -208,7 +209,7 @@ export default function Board({
       </div>
 
       {/* ── Dice + Roll button ── */}
-      <Dice dice={dice} phase={phase} pendingSubmit={pendingSubmit} canUndo={canUndo} onRoll={onRoll} onUndo={onUndo} onSubmit={onSubmit} />
+      <Dice dice={dice} phase={phase} pendingSubmit={pendingSubmit} canUndo={canUndo && !aiThinking} onRoll={aiThinking ? null : onRoll} onUndo={aiThinking ? null : onUndo} onSubmit={aiThinking ? null : onSubmit} />
 
       {/* ── Status bar ── */}
       <GameStatus
@@ -217,6 +218,7 @@ export default function Board({
         notification={notification}
         passable={passable}
         winner={winner}
+        aiThinking={aiThinking}
         onPass={onPass}
       />
 

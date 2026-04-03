@@ -1,7 +1,10 @@
 /**
  * OpeningRoll — pre-game screen where each player rolls one die to determine
  * who goes first. High roll wins and uses both dice as their opening move.
+ *
+ * When vsAi is true, the AI's die (White) auto-rolls 800ms after the human rolls.
  */
+import { useEffect } from 'react'
 
 const PIP_LAYOUTS = {
   1: [[50, 50]],
@@ -99,8 +102,17 @@ function PlayerPanel({ label, isBlack, die, canRoll, onRoll }) {
   )
 }
 
-export default function OpeningRoll({ blackDie, whiteDie, tie, onRoll, onReset }) {
+export default function OpeningRoll({ blackDie, whiteDie, tie, vsAi, onRoll, onReset }) {
   const bothRolled = blackDie !== null && whiteDie !== null
+
+  // When playing vs AI: auto-roll White's die 900ms after Black rolls
+  useEffect(() => {
+    if (!vsAi) return
+    if (blackDie !== null && whiteDie === null && !tie) {
+      const t = setTimeout(() => onRoll(2), 900)
+      return () => clearTimeout(t)
+    }
+  }, [vsAi, blackDie, whiteDie, tie])
 
   let statusText  = 'Each player rolls — highest die goes first'
   let statusColor = '#6b7280'
@@ -166,10 +178,10 @@ export default function OpeningRoll({ blackDie, whiteDie, tie, onRoll, onReset }
           </div>
 
           <PlayerPanel
-            label="White"
+            label={vsAi ? 'AI' : 'White'}
             isBlack={false}
             die={whiteDie}
-            canRoll={whiteDie === null}
+            canRoll={!vsAi && whiteDie === null}
             onRoll={() => onRoll(2)}
           />
         </div>
