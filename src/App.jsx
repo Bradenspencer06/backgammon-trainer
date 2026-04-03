@@ -1,4 +1,5 @@
 import Board from './components/Board'
+import OpeningRoll from './components/OpeningRoll'
 import { useGameState } from './hooks/useGameState'
 
 export default function App() {
@@ -15,12 +16,26 @@ export default function App() {
     delta,
     hint,
     pendingSubmit,
+    openingRoll,
+    rollOpeningDie,
     rollDice,
     touchPoint,
     touchPass,
     submitTurn,
     resetGame,
   } = useGameState()
+
+  // Show the opening roll screen until both players have rolled and a winner is determined
+  if (!openingRoll.complete) {
+    return (
+      <OpeningRoll
+        blackDie={openingRoll.blackDie}
+        whiteDie={openingRoll.whiteDie}
+        tie={openingRoll.tie}
+        onRoll={rollOpeningDie}
+      />
+    )
+  }
 
   return (
     <Board

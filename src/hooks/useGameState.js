@@ -17,6 +17,10 @@ const { Match } = jbackgammon
  *   hint         — { bestMoves, playerWinPct, bestWinPct, explanation } | null
  *                  Non-null only when the player's last move was suboptimal
  */
+// ─── Opening roll state ───────────────────────────────────────────────────────
+
+const OPENING_ROLL_INIT = { blackDie: null, whiteDie: null, tie: false, complete: false }
+
 export function useGameState() {
   const matchRef = useRef(null)
   if (matchRef.current === null) {
@@ -26,6 +30,15 @@ export function useGameState() {
   }
 
   const [snapshot, setSnapshot] = useState(() => matchRef.current.asJson)
+
+  // Opening roll — each player rolls one die before the game starts.
+  // Stored in a ref so rollOpeningDie can read current values without stale closure.
+  const openingRollRef = useRef({ ...OPENING_ROLL_INIT })
+  const [openingRoll, _setOpeningRoll] = useState(openingRollRef.current)
+  function setOpeningRoll(next) {
+    openingRollRef.current = next
+    _setOpeningRoll(next)
+  }
 
   // Training layer state
   const [winProb, setWinProb]       = useState(0.5)
@@ -46,6 +59,47 @@ export function useGameState() {
   const match = matchRef.current
   const gs = match.gameState
   const currentPlayer = gs.currentPlayerNumber
+
+  // ─── Opening roll ────────────────────────────────────────────────────────────
+  // Each player rolls one die before the game starts. High roll goes first and
+  // uses both dice as the opening move roll. Ties reset automatically.
+
+  function rollOpeningDie(player) {
+    const n = Math.ceil(Math.random() * 6)
+    const curr = openingRollRef.current
+    const blackDie = player === 1 ? n : curr.blackDie
+    const whiteDie = player === 2 ? n : curr.whiteDie
+
+    if (blackDie !== null && whiteDie !== null) {
+      if (blackDie === whiteDie) {
+        // Tie — show both dice, then auto-reset after 1.5s
+        setOpeningRoll({ blackDie, whiteDie, tie: true, complete: false })
+        setTimeout(() => setOpeningRoll({ ...OPENING_ROLL_INIT }), 1500)
+      } else {
+        // Winner determined — build Match in move phase with both dice
+        const winner   = blackDie > whiteDie ? 1 : 2
+        const winnerDie = winner === 1 ? blackDie : whiteDie
+        const loserDie  = winner === 1 ? whiteDie : blackDie
+        matchRef.current = new Match({
+          ...INITIAL_MATCH_STATE,
+          move_list: [],
+          game_state: {
+            ...INITIAL_MATCH_STATE.game_state,
+            current_player_number: winner,
+            current_phase: 'move',
+            dice: [
+              { number: winnerDie, used: false },
+              { number: loserDie,  used: false },
+            ],
+          },
+        })
+        setSnapshot({ ...matchRef.current.asJson })
+        setOpeningRoll({ blackDie, whiteDie, tie: false, complete: true })
+      }
+    } else {
+      setOpeningRoll({ blackDie, whiteDie, tie: false, complete: false })
+    }
+  }
 
   // ─── Dice roll ───────────────────────────────────────────────────────────────
   // After rolling, enumerate all moves and find the best one. Store the
@@ -147,6 +201,7 @@ export function useGameState() {
     setDelta(null)
     setHint(null)
     setPendingSubmit(false)
+    setOpeningRoll({ ...OPENING_ROLL_INIT })
   }
 
   // ─── Post-turn analysis ───────────────────────────────────────────────────────
@@ -216,6 +271,9 @@ export function useGameState() {
     dice:             snapshot.game_state.dice,
     passable:         match.passable(currentPlayer),
     winner:           match.winner,
+    // Opening roll
+    openingRoll,
+    rollOpeningDie,
     // Training layer
     winProb,
     delta,
