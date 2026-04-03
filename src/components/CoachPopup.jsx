@@ -43,14 +43,6 @@ export default function CoachPopup({
   const bestPct   = playerWhoMoved === 1 ? bestWinPct         : 100 - bestWinPct
   const pctGap    = (bestPct - playerPct).toFixed(1)
 
-  const moveStr = bestMoves
-    .map(({ from, to }) => {
-      const f = from === 0 ? 'Bar' : String(from)
-      const t = to === 25  ? 'Off' : String(to)
-      return `${f} → ${t}`
-    })
-    .join('   ·   ')
-
   return (
     /* Backdrop — tap outside card to close */
     <div
@@ -193,21 +185,6 @@ export default function CoachPopup({
             </p>
             <p style={{ fontFamily: 'monospace', fontSize: '0.6rem', color: '#6b7280' }}>{label} win chance</p>
           </div>
-        </div>
-
-        {/* ── Best move notation ── */}
-        <div style={{
-          backgroundColor: '#1a1a2e',
-          borderRadius:    10,
-          padding:         '0.65rem 1rem',
-          border:          '1px solid #2d2d4e',
-        }}>
-          <p style={{ fontFamily: 'monospace', fontSize: '0.6rem', color: '#6b7280', letterSpacing: '0.1em', marginBottom: '0.25rem' }}>
-            BEST MOVE
-          </p>
-          <p style={{ fontFamily: 'monospace', fontSize: '0.85rem', fontWeight: 700, color: '#a78bfa' }}>
-            {moveStr}
-          </p>
         </div>
 
         {/* ── Plain-English explanation ── */}
