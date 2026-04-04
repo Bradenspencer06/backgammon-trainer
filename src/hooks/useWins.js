@@ -8,7 +8,7 @@
 
 import { useState } from 'react'
 
-export const WINS_TO_PROMOTE = 3
+export const WINS_TO_PROMOTE = 5
 
 const STORAGE_KEY = 'bgtrainer_wins'
 
