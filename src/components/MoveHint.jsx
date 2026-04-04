@@ -13,15 +13,35 @@ export default function MoveHint({
   playerWhoMoved,
   beforeGameState,
   afterGameState,
+  onClose,
 }) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen]           = useState(false)
+  const [gateReleased, setGateReleased] = useState(false)
 
   if (!bestMoves || bestMoves.length === 0) return null
 
+  // Called when the user dismisses the popup (read it) or skips (X on button)
+  function releaseGate() {
+    if (!gateReleased) {
+      setGateReleased(true)
+      onClose?.()
+    }
+  }
+
+  function handlePopupClose() {
+    setOpen(false)
+    releaseGate()
+  }
+
+  function handleSkip() {
+    releaseGate()
+  }
+
   return (
     <>
-      {/* Trigger button */}
-      <div className="flex flex-col items-center" style={{ maxWidth: '56rem', width: '100%' }}>
+      {/* ── Coach tip button row ── */}
+      <div className="flex items-center justify-center gap-2" style={{ maxWidth: '56rem', width: '100%' }}>
+        {/* Main tap-to-open button */}
         <button
           onClick={() => setOpen(true)}
           className="flex items-center gap-2 rounded-xl font-mono font-bold uppercase tracking-wide"
@@ -33,18 +53,44 @@ export default function MoveHint({
             boxShadow:       '0 0 16px rgba(251,191,36,0.25), 0 2px 8px rgba(0,0,0,0.4)',
             fontSize:        '0.75rem',
             letterSpacing:   '0.12em',
-            animation:       'hintPulse 2s ease-in-out infinite',
+            animation:       gateReleased ? 'none' : 'hintPulse 2s ease-in-out infinite',
+            opacity:         gateReleased ? 0.6 : 1,
+            cursor:          'pointer',
           }}
         >
           <span style={{ fontSize: '1.1rem' }}>💡</span>
-          Coach tip available — tap to see
+          {gateReleased ? 'Review coach tip' : 'Coach tip — tap to see'}
         </button>
+
+        {/* ✕ skip button — only shown while game is paused (gate not yet released) */}
+        {!gateReleased && (
+          <button
+            onClick={handleSkip}
+            aria-label="Skip coach tip"
+            style={{
+              width:           '2rem',
+              height:          '2rem',
+              borderRadius:    '50%',
+              backgroundColor: '#1f2937',
+              border:          '1px solid #374151',
+              color:           '#6b7280',
+              fontSize:        '0.9rem',
+              cursor:          'pointer',
+              display:         'flex',
+              alignItems:      'center',
+              justifyContent:  'center',
+              flexShrink:      0,
+            }}
+          >
+            ✕
+          </button>
+        )}
       </div>
 
-      {/* Full-screen coaching popup */}
+      {/* ── Full-screen coaching popup ── */}
       <CoachPopup
         open={open}
-        onClose={() => setOpen(false)}
+        onClose={handlePopupClose}
         bestMoves={bestMoves}
         playerWinPct={playerWinPct}
         bestWinPct={bestWinPct}

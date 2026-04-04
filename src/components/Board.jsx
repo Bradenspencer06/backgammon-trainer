@@ -81,17 +81,67 @@ function Bar({ bar, onBarClick }) {
   )
 }
 
-function HomeColumn() {
+function HomeColumn({ offBoard, vsAi, onPointClick }) {
+  const pieces     = offBoard?.pieces ?? []
+  const blackCount = pieces.filter(p => p.player_number === 1).length
+  const whiteCount = pieces.filter(p => p.player_number === 2).length
+
+  // Labels: in vsAi mode show YOU / CPU, otherwise BLK / WHT
+  const blackLabel = vsAi ? 'YOU'  : 'BLK'
+  const whiteLabel = vsAi ? 'CPU'  : 'WHT'
+  const blackColor = vsAi ? '#4ade80' : '#6b7280'
+  const whiteColor = vsAi ? '#93c5fd' : '#6b7280'
+
   return (
     <div
       className="flex flex-col flex-shrink-0"
-      style={{ backgroundColor: HOME_BG, width: '3.5rem' }}
+      onClick={() => onPointClick('off_board')}
+      style={{ backgroundColor: HOME_BG, width: '3.5rem', cursor: 'pointer' }}
     >
-      <div className="flex-1 flex flex-col items-center justify-end pb-1 border-b border-stone-700">
-        <span className="font-mono text-stone-500 select-none" style={{ fontSize: '0.6rem' }}>BLK</span>
+      {/* Top half — Black borne off (stacks downward from center) */}
+      <div
+        className="flex-1 flex flex-col items-center justify-end pb-1 border-b border-stone-700"
+        style={{ gap: '1px', overflow: 'hidden' }}
+      >
+        {blackCount === 0 ? (
+          <span className="font-mono select-none" style={{ fontSize: '0.6rem', color: blackColor, fontWeight: 700, letterSpacing: '0.05em' }}>
+            {blackLabel}
+          </span>
+        ) : (
+          <>
+            {Array.from({ length: blackCount }, (_, i) => (
+              <div key={i} style={{ width: '1.5rem', height: '1.5rem', flexShrink: 0 }}>
+                <Checker color="black" />
+              </div>
+            ))}
+            <span className="font-mono select-none" style={{ fontSize: '0.55rem', color: '#c9a227' }}>
+              {blackCount}/15
+            </span>
+          </>
+        )}
       </div>
-      <div className="flex-1 flex flex-col items-center justify-start pt-1">
-        <span className="font-mono text-stone-500 select-none" style={{ fontSize: '0.6rem' }}>WHT</span>
+
+      {/* Bottom half — White borne off (stacks upward from center) */}
+      <div
+        className="flex-1 flex flex-col items-center justify-start pt-1"
+        style={{ gap: '1px', overflow: 'hidden' }}
+      >
+        {whiteCount === 0 ? (
+          <span className="font-mono select-none" style={{ fontSize: '0.6rem', color: whiteColor, fontWeight: 700, letterSpacing: '0.05em' }}>
+            {whiteLabel}
+          </span>
+        ) : (
+          <>
+            <span className="font-mono select-none" style={{ fontSize: '0.55rem', color: '#c9a227' }}>
+              {whiteCount}/15
+            </span>
+            {Array.from({ length: whiteCount }, (_, i) => (
+              <div key={i} style={{ width: '1.5rem', height: '1.5rem', flexShrink: 0 }}>
+                <Checker color="white" />
+              </div>
+            ))}
+          </>
+        )}
       </div>
     </div>
   )
@@ -110,6 +160,8 @@ export default function Board({
   phase,
   dice,
   notification,
+  vsAi,
+  lastAiDice,
   passable,
   winner,
   winProb,
@@ -124,10 +176,12 @@ export default function Board({
   onUndo,
   onSubmit,
   onReset,
+  onHintClose,
 }) {
   // Translate jbackgammon points array → { [1..24]: { color, count } }
   const position = pointsToPosition(gameState.game_state.points)
-  const bar = gameState.game_state.bar
+  const bar      = gameState.game_state.bar
+  const offBoard = gameState.game_state.off_board
 
   const ROW_H = '10rem'
 
@@ -159,7 +213,7 @@ export default function Board({
       </div>
 
       {/* ── Win probability bar ── */}
-      <WinBar winProb={winProb} delta={delta} currentPlayer={currentPlayer} />
+      <WinBar winProb={winProb} delta={delta} currentPlayer={currentPlayer} vsAi={vsAi} />
 
       {/* ── Outer wood frame ── */}
       <div
@@ -204,25 +258,11 @@ export default function Board({
             </div>
           </div>
 
-          <HomeColumn />
+          <HomeColumn offBoard={offBoard} vsAi={vsAi} onPointClick={onPointClick} />
         </div>
       </div>
 
-      {/* ── Dice + Roll button ── */}
-      <Dice dice={dice} phase={phase} pendingSubmit={pendingSubmit} canUndo={canUndo && !aiThinking} onRoll={aiThinking ? null : onRoll} onUndo={aiThinking ? null : onUndo} onSubmit={aiThinking ? null : onSubmit} />
-
-      {/* ── Status bar ── */}
-      <GameStatus
-        currentPlayer={currentPlayer}
-        phase={phase}
-        notification={notification}
-        passable={passable}
-        winner={winner}
-        aiThinking={aiThinking}
-        onPass={onPass}
-      />
-
-      {/* ── Move hint (only shown when player played suboptimally) ── */}
+      {/* ── Coach tip — between board and dice so it's central ── */}
       {hint && (
         <MoveHint
           bestMoves={hint.bestMoves}
@@ -232,8 +272,34 @@ export default function Board({
           playerWhoMoved={hint.playerWhoMoved}
           beforeGameState={hint.beforeGameState}
           afterGameState={hint.afterGameState}
+          onClose={onHintClose}
         />
       )}
+
+      {/* ── Dice + Roll button ── */}
+      {/* When it's the human's roll phase, show the AI's last dice until they roll */}
+      <Dice
+        dice={lastAiDice && phase === 'roll' ? lastAiDice : dice}
+        ghostDice={!!(lastAiDice && phase === 'roll')}
+        phase={phase}
+        pendingSubmit={pendingSubmit}
+        canUndo={canUndo && !aiThinking}
+        onRoll={aiThinking ? null : onRoll}
+        onUndo={aiThinking ? null : onUndo}
+        onSubmit={aiThinking ? null : onSubmit}
+      />
+
+      {/* ── Status bar ── */}
+      <GameStatus
+        currentPlayer={currentPlayer}
+        phase={phase}
+        notification={notification}
+        vsAi={vsAi}
+        passable={passable}
+        winner={winner}
+        aiThinking={aiThinking}
+        onPass={onPass}
+      />
     </div>
   )
 }

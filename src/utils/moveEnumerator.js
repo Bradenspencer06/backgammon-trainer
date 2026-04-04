@@ -9,15 +9,15 @@
  *   [{ moves: [{from, to}, ...], gameState: <game_state json after all moves> }, ...]
  *
  * "from" / "to" are point numbers 1–24.
- * Bar entry uses from: 0.  Bearing off uses to: 25.
+ * Bar entry uses from: 0.  Bearing off uses to: 'off_board'.
  */
 
 import jbackgammon from '@mrlhumphreys/jbackgammon'
 const { Match } = jbackgammon
 
 const ALL_POINTS = Array.from({ length: 24 }, (_, i) => i + 1)  // 1..24
-const BEAR_OFF   = 25  // sentinel for off-board destination
-const BAR_SRC    = 0   // sentinel for bar source
+const BEAR_OFF   = 'off_board'  // string sentinel matching jbackgammon's API
+const BAR_SRC    = 0            // sentinel for bar source
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -105,20 +105,16 @@ function tryMove(snapshot, src, dst, player) {
   const m1 = new Match({ ...snapshot, move_list: [...(snapshot.move_list ?? [])] })
 
   if (src === BAR_SRC) {
-    // jbackgammon: touchBar is separate from touchPoint
-    if (typeof m1.touchBar === 'function') {
-      m1.touchBar(player)
-    } else {
-      // Fallback: bar handled internally when you touch a destination
-      // while pieces are on the bar — skip explicit selection step
-    }
+    // jbackgammon uses touchPoint('bar', player) — no separate touchBar method
+    m1.touchPoint('bar', player)
   } else {
     m1.touchPoint(src, player)
   }
 
   // Verify source was selected (bar or point)
+  // Bar selected: selectedPoint will have constructorName 'Bar' and number 'bar'
   const srcSelected = src === BAR_SRC
-    ? m1.gameState.selectedBar !== null && m1.gameState.selectedBar !== undefined
+    ? m1.gameState.selectedPoint?.number === 'bar'
     : m1.gameState.selectedPoint?.number === src
 
   if (!srcSelected) return { type: 'invalid' }
@@ -130,14 +126,7 @@ function tryMove(snapshot, src, dst, player) {
     ? m1.gameState.dice.dice.filter(d => !d.used).length
     : snapshot.game_state.dice.filter(d => !d.used).length
 
-  if (dst === BEAR_OFF) {
-    // Bear-off: try touching each of the 6 home-board points for the player
-    // The library handles bear-off when you touch a home point beyond the board
-    // We'll represent bear-off as touching the highest available home point
-    // This path is approximate; full bear-off logic is engine-internal
-    return { type: 'invalid' }  // Placeholder — bear-off handled by library natively
-  }
-
+  // Touch the destination — works for points 1-24 AND 'off_board' (bear-off)
   m1.touchPoint(dst, player)
 
   const playerAfter = m1.gameState.currentPlayerNumber

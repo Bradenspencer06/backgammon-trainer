@@ -107,7 +107,7 @@ function DeltaPill({ delta }) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function WinBar({ winProb, delta, currentPlayer }) {
+export default function WinBar({ winProb, delta, currentPlayer, vsAi }) {
   const blackPct = Math.round((winProb ?? 0.5) * 100)
   const whitePct = 100 - blackPct
 
@@ -133,19 +133,32 @@ export default function WinBar({ winProb, delta, currentPlayer }) {
             border:          '1px solid #555',
             boxShadow:       blackLeading ? '0 0 6px rgba(255,255,255,0.2)' : 'none',
           }} />
-          <span style={{
-            fontFamily:    'monospace',
-            fontSize:      '0.95rem',
-            fontWeight:    700,
-            letterSpacing: '0.04em',
-            color:         blackLeading ? '#f1f5f9' : '#94a3b8',
-            transition:    'color 0.6s ease',
-          }}>
-            BLACK&nbsp;
-            <span style={{ color: blackLeading ? '#f1f5f9' : '#e2e8f0', fontSize: '1.1rem' }}>
-              {animatedBlack}%
+          <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1 }}>
+            <span style={{
+              fontFamily:    'monospace',
+              fontSize:      '0.95rem',
+              fontWeight:    700,
+              letterSpacing: '0.04em',
+              color:         blackLeading ? '#f1f5f9' : '#94a3b8',
+              transition:    'color 0.6s ease',
+            }}>
+              BLACK&nbsp;
+              <span style={{ color: blackLeading ? '#f1f5f9' : '#e2e8f0', fontSize: '1.1rem' }}>
+                {animatedBlack}%
+              </span>
             </span>
-          </span>
+            {vsAi && (
+              <span style={{
+                fontFamily:    'monospace',
+                fontSize:      '0.6rem',
+                color:         '#4ade80',
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+              }}>
+                You
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Delta pill — centered */}
@@ -153,20 +166,33 @@ export default function WinBar({ winProb, delta, currentPlayer }) {
 
         {/* White label */}
         <div className="flex items-center gap-2">
-          <span style={{
-            fontFamily:    'monospace',
-            fontSize:      '0.95rem',
-            fontWeight:    700,
-            letterSpacing: '0.04em',
-            color:         whiteLeading ? '#f1f5f9' : '#94a3b8',
-            transition:    'color 0.6s ease',
-            textAlign:     'right',
-          }}>
-            <span style={{ color: whiteLeading ? '#f1f5f9' : '#e2e8f0', fontSize: '1.1rem' }}>
-              {animatedWhite}%
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1 }}>
+            <span style={{
+              fontFamily:    'monospace',
+              fontSize:      '0.95rem',
+              fontWeight:    700,
+              letterSpacing: '0.04em',
+              color:         whiteLeading ? '#f1f5f9' : '#94a3b8',
+              transition:    'color 0.6s ease',
+              textAlign:     'right',
+            }}>
+              <span style={{ color: whiteLeading ? '#f1f5f9' : '#e2e8f0', fontSize: '1.1rem' }}>
+                {animatedWhite}%
+              </span>
+              &nbsp;WHITE
             </span>
-            &nbsp;WHITE
-          </span>
+            {vsAi && (
+              <span style={{
+                fontFamily:    'monospace',
+                fontSize:      '0.6rem',
+                color:         '#93c5fd',
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+              }}>
+                Computer
+              </span>
+            )}
+          </div>
           <div style={{
             width:           8,
             height:          8,

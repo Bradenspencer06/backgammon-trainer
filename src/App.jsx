@@ -15,6 +15,7 @@ export default function App() {
     currentPlayer,
     phase,
     dice,
+    lastAiDice,
     passable,
     winner,
     winProb,
@@ -36,6 +37,7 @@ export default function App() {
     touchPass,
     submitTurn,
     resetGame,
+    onHintClose,
   } = useGameState()
 
   const { wins, recordWin } = useWins()
@@ -120,8 +122,10 @@ export default function App() {
         currentPlayer={currentPlayer}
         phase={phase}
         dice={dice}
+        lastAiDice={lastAiDice}
         notification={notification}
-        passable={passable}
+        vsAi={vsAi}
+        passable={vsAi ? (currentPlayer === 1 && passable) : passable}
         winner={winner}
         winProb={winProb}
         delta={delta}
@@ -135,6 +139,7 @@ export default function App() {
         onUndo={undoMove}
         onSubmit={submitTurn}
         onReset={handleReset}
+        onHintClose={onHintClose}
       />
     </>
   )

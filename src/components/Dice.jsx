@@ -52,14 +52,19 @@ function Die({ value }) {
  * phase:     'roll' | 'move'
  * onRoll:    called when the Roll button is clicked
  */
-export default function Dice({ dice = [], phase, pendingSubmit, canUndo, onRoll, onSubmit, onUndo }) {
+export default function Dice({ dice = [], phase, ghostDice, pendingSubmit, canUndo, onRoll, onSubmit, onUndo }) {
   const [d1, d2] = dice
   const showRoll = phase === 'roll' && !pendingSubmit
 
+  const diceLabel = ghostDice ? 'COMPUTER ROLLED' : 'DICE'
+  const labelColor = ghostDice ? '#93c5fd' : '#9ca3af'
+
   return (
     <div className="flex flex-col items-center gap-3">
-      <p className="text-xs font-mono" style={{ color: '#9ca3af' }}>DICE</p>
-      <div className="flex items-center gap-4">
+      <p className="text-xs font-mono tracking-widest" style={{ color: labelColor, transition: 'color 0.3s' }}>
+        {diceLabel}
+      </p>
+      <div className="flex items-center gap-4" style={{ opacity: ghostDice ? 0.65 : 1, transition: 'opacity 0.3s' }}>
         <Die value={d1?.number ?? null} />
         <Die value={d2?.number ?? null} />
       </div>

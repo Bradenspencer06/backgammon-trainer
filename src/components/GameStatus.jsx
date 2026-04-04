@@ -3,20 +3,36 @@
  * Displays whose turn it is, the current phase, any notification from
  * the library, and a Pass button when the player has no legal moves.
  */
-export default function GameStatus({ currentPlayer, phase, notification, passable, winner, aiThinking, onPass }) {
-  const playerName  = currentPlayer === 1 ? 'Black' : 'White'
+export default function GameStatus({ currentPlayer, phase, notification, vsAi, passable, winner, aiThinking, onPass }) {
+  // In vsAi mode: human is always Black (1), AI is always White (2)
+  const isHuman    = !vsAi || currentPlayer === 1
+  const playerName = vsAi
+    ? (currentPlayer === 1 ? 'You' : 'Computer')
+    : (currentPlayer === 1 ? 'Black' : 'White')
   const playerColor = currentPlayer === 1 ? '#1c1c1c' : '#f0ebe0'
   const playerBg    = currentPlayer === 1 ? '#f0ebe0' : '#1c1c1c'
 
   if (winner) {
-    const winnerName = winner === 1 ? 'Black' : 'White'
+    const winnerName = vsAi
+      ? (winner === 1 ? 'You win!' : 'Computer wins')
+      : (winner === 1 ? 'Black wins!' : 'White wins!')
     return (
       <div className="flex flex-col items-center gap-2">
         <div className="text-2xl font-bold" style={{ color: '#d1c5b0', fontFamily: 'Georgia, serif' }}>
-          🏆 {winnerName} wins!
+          {winnerName}
         </div>
       </div>
     )
+  }
+
+  // Build the turn label
+  let turnLabel
+  if (aiThinking) {
+    turnLabel = 'Computer thinking…'
+  } else if (vsAi && !isHuman) {
+    turnLabel = 'Computer'
+  } else {
+    turnLabel = `${playerName} — ${phase === 'roll' ? 'Roll dice' : 'Move'}`
   }
 
   return (
@@ -41,7 +57,7 @@ export default function GameStatus({ currentPlayer, phase, notification, passabl
           className="text-sm font-mono font-bold tracking-widest uppercase"
           style={{ color: playerColor }}
         >
-          {aiThinking ? 'AI thinking…' : `${playerName} — ${phase === 'roll' ? 'Roll dice' : 'Move'}`}
+          {turnLabel}
         </span>
         {aiThinking && (
           <span style={{ display: 'flex', gap: 3 }}>

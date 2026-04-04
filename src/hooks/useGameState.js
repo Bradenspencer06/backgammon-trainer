@@ -41,6 +41,8 @@ export function useGameState() {
   const [hint, setHint]               = useState(null)
   const [pendingSubmit, setPendingSubmit] = useState(false)
   const [goodMove, setGoodMove]       = useState(null)
+  // AI's last rolled dice — kept visible until the human rolls their own
+  const [lastAiDice, setLastAiDice]   = useState(null)
 
   const scoringPromiseRef  = useRef(null)
   const pendingWinProbRef  = useRef(null)
@@ -48,6 +50,8 @@ export function useGameState() {
   const pendingHintRef     = useRef(null)
   const pendingGoodMoveRef = useRef(null)
   const moveHistoryRef     = useRef([])
+  // Gate promise: AI waits here while the good-move toast is visible
+  const toastGateRef       = useRef(null)
 
   function sync() { setSnapshot({ ...matchRef.current.asJson }) }
 
@@ -110,6 +114,7 @@ export function useGameState() {
   // ─── Human dice roll ──────────────────────────────────────────────────────────
 
   function rollDice() {
+    setLastAiDice(null)        // human is rolling — clear the AI ghost dice
     match.touchDice(currentPlayer)
     sync()
 
@@ -205,8 +210,23 @@ export function useGameState() {
   function submitTurn() {
     if (pendingWinProbRef.current  !== null) setWinProb(pendingWinProbRef.current)
     if (pendingDeltaRef.current    !== null) setDelta(pendingDeltaRef.current)
-    if (pendingHintRef.current     !== null) setHint(pendingHintRef.current)
-    if (pendingGoodMoveRef.current !== null) setGoodMove(pendingGoodMoveRef.current)
+
+    // Hints and good-move toasts are mutually exclusive — both use the same gate.
+    if (pendingHintRef.current !== null) {
+      // Coach popup: no auto-timeout — AI waits until the user dismisses it
+      let gateResolve
+      const gatePromise = new Promise(r => { gateResolve = r })
+      toastGateRef.current = { promise: gatePromise, resolve: gateResolve }
+      setHint(pendingHintRef.current)
+    } else if (pendingGoodMoveRef.current !== null) {
+      // Good-move toast: auto-resolves after toast lifetime (4500ms + 400ms fade)
+      let gateResolve
+      const gatePromise = new Promise(r => { gateResolve = r })
+      toastGateRef.current = { promise: gatePromise, resolve: gateResolve }
+      setTimeout(gateResolve, 4900)
+      setGoodMove(pendingGoodMoveRef.current)
+    }
+
     pendingWinProbRef.current  = null
     pendingDeltaRef.current    = null
     pendingHintRef.current     = null
@@ -214,7 +234,7 @@ export function useGameState() {
     moveHistoryRef.current     = []
     setPendingSubmit(false)
 
-    // If it's now the AI's turn, kick it off
+    // If it's now the AI's turn, kick it off (it will wait for the toast gate)
     const nextPlayer = matchRef.current.gameState.currentPlayerNumber
     if (difficultyRef.current && difficultyRef.current !== '2player' && nextPlayer === AI_PLAYER) {
       _runAiTurn()
@@ -231,11 +251,13 @@ export function useGameState() {
     pendingDeltaRef.current    = null
     pendingHintRef.current     = null
     moveHistoryRef.current     = []
+    if (toastGateRef.current) { toastGateRef.current.resolve(); toastGateRef.current = null }
     setSnapshot({ ...matchRef.current.asJson })
     setWinProb(0.5)
     setDelta(null)
     setHint(null)
     setGoodMove(null)
+    setLastAiDice(null)
     setAiThinking(false)
     setPendingSubmit(false)
     setOpeningRoll({ ...OPENING_ROLL_INIT })
@@ -247,6 +269,13 @@ export function useGameState() {
   async function _runAiTurn() {
     const turnId = ++aiTurnIdRef.current
     const vsAi   = difficultyRef.current
+
+    // Wait for any good-move toast to finish before starting the AI turn
+    if (toastGateRef.current) {
+      await toastGateRef.current.promise
+      toastGateRef.current = null
+      if (aiTurnIdRef.current !== turnId) return   // aborted during wait
+    }
 
     setAiThinking(true)
 
@@ -260,8 +289,8 @@ export function useGameState() {
 
     const rolled = JSON.parse(JSON.stringify(matchRef.current.asJson))
 
-    // Pause to show the dice
-    await delay(750)
+    // Pause to show the dice before moving
+    await delay(1200)
     if (aiTurnIdRef.current !== turnId) return
 
     // Enumerate and score all candidates
@@ -270,8 +299,8 @@ export function useGameState() {
     if (candidates.length === 0 || matchRef.current.passable(AI_PLAYER)) {
       matchRef.current.touchPass(AI_PLAYER)
       sync()
+      setLastAiDice(rolled.game_state.dice)
       setAiThinking(false)
-      // Update win prob silently
       evaluatePosition(matchRef.current.asJson.game_state).then(prob => setWinProb(prob))
       return
     }
@@ -290,28 +319,30 @@ export function useGameState() {
 
     // Execute moves one at a time so the human can watch
     for (const move of chosen.moves) {
-      await delay(480)
+      await delay(650)
       if (aiTurnIdRef.current !== turnId) return
 
       // Select source (bar or point)
       if (move.from === 0) {
-        if (typeof matchRef.current.touchBar === 'function') {
-          matchRef.current.touchBar(AI_PLAYER)
-        }
+        matchRef.current.touchPoint('bar', AI_PLAYER)
       } else {
         matchRef.current.touchPoint(move.from, AI_PLAYER)
       }
       sync()
 
-      await delay(380)
+      await delay(500)
       if (aiTurnIdRef.current !== turnId) return
 
       matchRef.current.touchPoint(move.to, AI_PLAYER)
       sync()
     }
 
-    await delay(300)
+    // Pause after last move so player can see the final position
+    await delay(700)
     if (aiTurnIdRef.current !== turnId) return
+
+    // Persist AI dice so human can see what was rolled until they roll their own
+    setLastAiDice(rolled.game_state.dice)
 
     // Update win prob silently (no training feedback for AI turns)
     evaluatePosition(matchRef.current.asJson.game_state).then(prob => {
@@ -392,6 +423,7 @@ export function useGameState() {
     currentPlayer,
     phase:            gs.currentPhase,
     dice:             snapshot.game_state.dice,
+    lastAiDice,
     passable:         match.passable(currentPlayer),
     winner:           match.winner,
     // Difficulty / AI
@@ -410,7 +442,15 @@ export function useGameState() {
     delta,
     hint,
     goodMove,
-    clearGoodMove: () => setGoodMove(null),
+    clearGoodMove: () => {
+      setGoodMove(null)
+      if (toastGateRef.current) { toastGateRef.current.resolve(); toastGateRef.current = null }
+    },
+    onHintClose: () => {
+      // Don't clear the hint — keep the button visible so user can re-open
+      // Just release the gate so the AI can start
+      if (toastGateRef.current) { toastGateRef.current.resolve(); toastGateRef.current = null }
+    },
     pendingSubmit,
     rollDice,
     touchPoint,

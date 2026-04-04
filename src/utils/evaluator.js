@@ -44,21 +44,27 @@ export async function evaluatePosition(gameStateJson) {
 export function explainDifference(worseGs, betterGs, playerNumber) {
   const sign = playerNumber === 1 ? 1 : -1
 
-  const pipDelta     = sign * (totalPips(betterGs, 2) - totalPips(worseGs, 2)
-                             - totalPips(betterGs, 1) + totalPips(worseGs, 1))
-  const blotDelta    = sign * (countBlots(worseGs, playerNumber) - countBlots(betterGs, playerNumber))
-  const shotDelta    = sign * (countDirectShots(worseGs, playerNumber) - countDirectShots(betterGs, playerNumber))
-  const homeDelta    = sign * (countHomePoints(betterGs, playerNumber) - countHomePoints(worseGs, playerNumber))
-  const primeDelta   = sign * (longestPrime(betterGs, playerNumber) - longestPrime(worseGs, playerNumber))
-  const anchorDelta  = sign * (countAnchors(betterGs, playerNumber) - countAnchors(worseGs, playerNumber))
+  const pipDelta    = sign * (totalPips(betterGs, 2) - totalPips(worseGs, 2)
+                            - totalPips(betterGs, 1) + totalPips(worseGs, 1))
+  const blotDelta   = sign * (countBlots(worseGs, playerNumber) - countBlots(betterGs, playerNumber))
+  const shotDelta   = sign * (countDirectShots(worseGs, playerNumber) - countDirectShots(betterGs, playerNumber))
+  const homeDelta   = sign * (countHomePoints(betterGs, playerNumber) - countHomePoints(worseGs, playerNumber))
+  const primeDelta  = sign * (longestPrime(betterGs, playerNumber) - longestPrime(worseGs, playerNumber))
+  const anchorDelta = sign * (countAnchors(betterGs, playerNumber) - countAnchors(worseGs, playerNumber))
+
+  // In a race/bear-off, structural concepts don't apply — just talk pip count
+  if (isRacePosition(worseGs) || isBearOffPosition(worseGs)) {
+    if (pipDelta > 0) return `Moves your pieces further along — in a pure race, every pip counts`
+    return `Gets your pieces home faster — efficiency is everything in the bear-off`
+  }
 
   // Return the most significant reason — written for beginners, no jargon
   const reasons = [
-    [Math.abs(shotDelta)*5,  shotDelta > 0   && `Your piece was left wide open — your opponent had an easy shot to knock it off the board`],
-    [Math.abs(blotDelta)*3,  blotDelta > 0   && `Keeps your pieces safer — fewer lone pieces that your opponent can knock off`],
-    [Math.abs(pipDelta),     pipDelta > 0    && `Moves your pieces further ahead — every step closer to home counts`],
-    [Math.abs(homeDelta)*2,  homeDelta > 0   && `Locks down a point in your home board, making it harder for your opponent to come back in`],
-    [Math.abs(primeDelta)*4, primeDelta > 0  && `Builds a longer wall of points, making it very hard for your opponent's pieces to get past`],
+    [Math.abs(shotDelta)*5,  shotDelta > 0  && `Your piece was left wide open — your opponent had an easy shot to knock it off the board`],
+    [Math.abs(blotDelta)*3,  blotDelta > 0  && `Keeps your pieces safer — fewer lone pieces that your opponent can knock off`],
+    [Math.abs(pipDelta),     pipDelta > 0   && `Moves your pieces further ahead — every step closer to home counts`],
+    [Math.abs(homeDelta)*2,  homeDelta > 0  && `Locks down a point in your home board, making it harder for your opponent to come back in`],
+    [Math.abs(primeDelta)*4, primeDelta > 0 && `Builds a longer wall of points, making it very hard for your opponent's pieces to get past`],
     [Math.abs(anchorDelta)*3,anchorDelta > 0 && `Holds a strong defensive position deep in your opponent's home board`],
   ]
     .filter(([, msg]) => msg)
@@ -80,9 +86,20 @@ function heuristicEval(gs) {
   // Normalised to [-1, +1]; positive = Black is ahead
   const pipScore = total > 0 ? (whitePips - blackPips) / total : 0
 
+  // ── Detect race / contact situation ───────────────────────────────────────
+  const isRace    = isRacePosition(gs)
+  const isBearOff = isBearOffPosition(gs)
+
+  // In pure race / late bear-off, only pip count matters — no structural play
+  if (isBearOff) {
+    // Scale aggressively so a 2:1 pip advantage reaches ~99%
+    return sigmoid(pipScore * 7.0)
+  }
+  if (isRace) {
+    return sigmoid(pipScore * 5.0)
+  }
+
   // ── 2. Direct shots — most critical danger signal ─────────────────────────
-  // Counts how many opponent pieces can hit each blot in a single move (1–6 away).
-  // A piece on 21 with white on 23 and 24 is hit by 4 pieces = very dangerous.
   const shotScore = (countDirectShots(gs, 2) - countDirectShots(gs, 1)) * 0.055
 
   // ── 3. Raw blot count (secondary — proximity-unaware) ─────────────────────
@@ -106,6 +123,43 @@ function heuristicEval(gs) {
 
   const raw = pipScore * 3.2 + shotScore + blotScore + homeScore + primeScore + anchorScore + barScore
   return sigmoid(raw)
+}
+
+// ─── Race / contact detection ─────────────────────────────────────────────────
+
+/**
+ * A "pure race" means the two sides have passed each other — no further hitting
+ * is possible. Neither player has pieces in the other's home board, and neither
+ * has pieces on the bar.
+ *
+ * Black home: 19–24   White home: 1–6
+ */
+function isRacePosition(gs) {
+  if (barCount(gs, 1) > 0 || barCount(gs, 2) > 0) return false
+  const blackInWhiteHome = gs.points
+    .filter(pt => pt.number >= 1 && pt.number <= 6)
+    .some(pt => pt.pieces.some(p => p.player_number === 1))
+  const whiteInBlackHome = gs.points
+    .filter(pt => pt.number >= 19 && pt.number <= 24)
+    .some(pt => pt.pieces.some(p => p.player_number === 2))
+  return !blackInWhiteHome && !whiteInBlackHome
+}
+
+/**
+ * A "bear-off position" means both players have all remaining pieces in their
+ * own home board (or already borne off). Pure pip race with no crossover risk.
+ *
+ * Black home: 19–24   White home: 1–6
+ */
+function isBearOffPosition(gs) {
+  if (!isRacePosition(gs)) return false
+  const blackOutsideHome = gs.points
+    .filter(pt => pt.number < 19)
+    .some(pt => pt.pieces.some(p => p.player_number === 1))
+  const whiteOutsideHome = gs.points
+    .filter(pt => pt.number > 6)
+    .some(pt => pt.pieces.some(p => p.player_number === 2))
+  return !blackOutsideHome && !whiteOutsideHome
 }
 
 // ─── Position metrics ─────────────────────────────────────────────────────────
