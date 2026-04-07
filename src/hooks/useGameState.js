@@ -1,8 +1,9 @@
 import { useState, useRef } from 'react'
 import jbackgammon from '@mrlhumphreys/jbackgammon'
 import { INITIAL_MATCH_STATE } from '../constants/gameConstants'
-import { evaluatePosition } from '../utils/evaluator'
-import { enumerateAllMoves } from '../utils/moveEnumerator'
+import { evaluatePosition, explainDifference } from '../utils/evaluator'
+import { mapWithConcurrency } from '../utils/asyncPool'
+import { enumerateAllMoves, coachingPositionKey } from '../utils/moveEnumerator'
 import { selectAiMove } from '../utils/aiPlayer'
 
 const { Match } = jbackgammon
@@ -10,7 +11,23 @@ const { Match } = jbackgammon
 const OPENING_ROLL_INIT = { blackDie: null, whiteDie: null, tie: false, complete: false }
 const AI_PLAYER = 2   // AI always plays White
 
+/** How many legal plays we score in parallel (AI: sampled roll equity; human coaching: two-phase below). */
+const EVAL_CANDIDATE_CONCURRENCY = 8
+/** After fast screening, full GNU roll equity on this many top lines (`VITE_COACHING_REFINE_TOP`, default 12). */
+const _refineRaw = Number(import.meta.env.VITE_COACHING_REFINE_TOP)
+const COACHING_REFINE_TOP = Math.min(
+  36,
+  Math.max(1, Number.isFinite(_refineRaw) && _refineRaw > 0 ? Math.floor(_refineRaw) : 12)
+)
+const COACHING_REFINE_CONCURRENCY = 3
+
 const delay = ms => new Promise(r => setTimeout(r, ms))
+
+function pickBestByEval(scored, movingPlayer) {
+  return scored.reduce((a, b) =>
+    movingPlayer === 1 ? (b.evalProb > a.evalProb ? b : a) : (b.evalProb < a.evalProb ? b : a)
+  )
+}
 
 export function useGameState() {
   const matchRef = useRef(null)
@@ -52,6 +69,10 @@ export function useGameState() {
   const moveHistoryRef     = useRef([])
   // Gate promise: AI waits here while the good-move toast is visible
   const toastGateRef       = useRef(null)
+  // Submit can fire before GNU finishes — queue handoff until post-turn analysis populates refs
+  const submitWantedRef     = useRef(false)
+  const analysisReadyRef    = useRef(false)
+  const turnAnalysisSeqRef  = useRef(0)
 
   function sync() { setSnapshot({ ...matchRef.current.asJson }) }
 
@@ -131,21 +152,38 @@ export function useGameState() {
     setGoodMove(null)
     setPendingSubmit(false)
 
-    scoringPromiseRef.current = evaluatePosition(rolled.game_state).then(prob => {
-      setWinProb(prob)
+    // Two-phase coaching: fast sampled equity on every legal play (keeps analysis responsive), then
+    // full GNU roll average on the top-N from that sort so the "best move" matches the real engine.
+    scoringPromiseRef.current = (async () => {
       const candidates = enumerateAllMoves(rolled)
-      if (candidates.length === 0) return { pre: prob, best: null }
-
-      return Promise.all(
-        candidates.map(c => evaluatePosition(c.gameState).then(p => ({ ...c, evalProb: p })))
-      ).then(scored => ({
-        pre: prob,
-        best: scored.reduce((a, b) =>
-          movingPlayer === 1 ? (b.evalProb > a.evalProb ? b : a) : (b.evalProb < a.evalProb ? b : a)
-        ),
-        beforeGameState: rolled.game_state,
+      if (candidates.length === 0) {
+        const pre = await evaluatePosition(rolled.game_state, { postTurnFast: true })
+        return { pre, best: null }
+      }
+      const [pre, scoredFast] = await Promise.all([
+        evaluatePosition(rolled.game_state, { postTurnFast: true }),
+        mapWithConcurrency(candidates, EVAL_CANDIDATE_CONCURRENCY, async (c) => ({
+          ...c,
+          evalProb: await evaluatePosition(c.gameState, { postTurnFast: true }),
+        })),
+      ])
+      const sorted = [...scoredFast].sort((a, b) =>
+        movingPlayer === 1 ? b.evalProb - a.evalProb : a.evalProb - b.evalProb
+      )
+      const shortlistLen = Math.min(COACHING_REFINE_TOP, sorted.length)
+      const shortlist = sorted.slice(0, shortlistLen)
+      const refined = await mapWithConcurrency(shortlist, COACHING_REFINE_CONCURRENCY, async (c) => ({
+        ...c,
+        evalProb: await evaluatePosition(c.gameState),
       }))
-    })
+      const best = pickBestByEval(refined, movingPlayer)
+      return {
+        pre,
+        best,
+        beforeGameState: rolled.game_state,
+        dice: rolled.game_state.dice,
+      }
+    })()
   }
 
   // ─── Human point touch ───────────────────────────────────────────────────────
@@ -194,6 +232,9 @@ export function useGameState() {
     matchRef.current = new Match({ ...prev, move_list: [] })
     sync()
     if (pendingSubmit) {
+      turnAnalysisSeqRef.current++
+      analysisReadyRef.current   = false
+      submitWantedRef.current    = false
       scoringPromiseRef.current  = null
       pendingWinProbRef.current  = null
       pendingDeltaRef.current    = null
@@ -207,19 +248,20 @@ export function useGameState() {
 
   // ─── Submit (human hand-off) ──────────────────────────────────────────────────
 
-  function submitTurn() {
+  function flushSubmitHandoff() {
+    if (!submitWantedRef.current || !analysisReadyRef.current) return
+    submitWantedRef.current = false
+    analysisReadyRef.current  = false
+
     if (pendingWinProbRef.current  !== null) setWinProb(pendingWinProbRef.current)
     if (pendingDeltaRef.current    !== null) setDelta(pendingDeltaRef.current)
 
-    // Hints and good-move toasts are mutually exclusive — both use the same gate.
     if (pendingHintRef.current !== null) {
-      // Coach popup: no auto-timeout — AI waits until the user dismisses it
       let gateResolve
       const gatePromise = new Promise(r => { gateResolve = r })
       toastGateRef.current = { promise: gatePromise, resolve: gateResolve }
       setHint(pendingHintRef.current)
     } else if (pendingGoodMoveRef.current !== null) {
-      // Good-move toast: auto-resolves after toast lifetime (4500ms + 400ms fade)
       let gateResolve
       const gatePromise = new Promise(r => { gateResolve = r })
       toastGateRef.current = { promise: gatePromise, resolve: gateResolve }
@@ -232,13 +274,19 @@ export function useGameState() {
     pendingHintRef.current     = null
     pendingGoodMoveRef.current = null
     moveHistoryRef.current     = []
-    setPendingSubmit(false)
 
-    // If it's now the AI's turn, kick it off (it will wait for the toast gate)
     const nextPlayer = matchRef.current.gameState.currentPlayerNumber
     if (difficultyRef.current && difficultyRef.current !== '2player' && nextPlayer === AI_PLAYER) {
       _runAiTurn()
     }
+  }
+
+  function submitTurn() {
+    submitWantedRef.current = true
+    moveHistoryRef.current  = []
+    setPendingSubmit(false)
+
+    flushSubmitHandoff()
   }
 
   // ─── Reset ────────────────────────────────────────────────────────────────────
@@ -260,6 +308,9 @@ export function useGameState() {
     setLastAiDice(null)
     setAiThinking(false)
     setPendingSubmit(false)
+    analysisReadyRef.current  = false
+    submitWantedRef.current   = false
+    turnAnalysisSeqRef.current++
     setOpeningRoll({ ...OPENING_ROLL_INIT })
     setDifficulty(null)   // go back to difficulty select
   }
@@ -270,59 +321,71 @@ export function useGameState() {
     const turnId = ++aiTurnIdRef.current
     const vsAi   = difficultyRef.current
 
-    // Wait for any good-move toast to finish before starting the AI turn
-    if (toastGateRef.current) {
-      await toastGateRef.current.promise
-      toastGateRef.current = null
-      if (aiTurnIdRef.current !== turnId) return   // aborted during wait
-    }
-
     setAiThinking(true)
 
-    // Brief thinking pause before rolling
-    await delay(950)
+    // Overlap coach / good-move time with roll + GNU scoring — only animate after the toast gate clears
+    const gatePromise = toastGateRef.current?.promise ?? Promise.resolve()
+
+    const prep = (async () => {
+      await delay(280)
+      if (aiTurnIdRef.current !== turnId) return null
+
+      matchRef.current.touchDice(AI_PLAYER)
+      sync()
+
+      const rolled = JSON.parse(JSON.stringify(matchRef.current.asJson))
+
+      await delay(380)
+      if (aiTurnIdRef.current !== turnId) return null
+
+      const candidates = enumerateAllMoves(rolled)
+
+      if (candidates.length === 0 || matchRef.current.passable(AI_PLAYER)) {
+        return { kind: 'pass', rolled }
+      }
+
+      const scored = await mapWithConcurrency(candidates, EVAL_CANDIDATE_CONCURRENCY, async (c) => ({
+        ...c,
+        evalProb: await evaluatePosition(c.gameState, {
+          aiMoveChoice: true,
+          aiExpertExact: vsAi === 'expert',
+        }),
+      }))
+      if (aiTurnIdRef.current !== turnId) return null
+
+      const chosen = selectAiMove(scored, vsAi, AI_PLAYER)
+      if (!chosen) return { kind: 'abort' }
+      return { kind: 'play', rolled, chosen }
+    })()
+
+    const [, prepResult] = await Promise.all([gatePromise, prep])
+    if (toastGateRef.current) toastGateRef.current = null
+
     if (aiTurnIdRef.current !== turnId) return
 
-    // Roll dice
-    matchRef.current.touchDice(AI_PLAYER)
-    sync()
+    if (!prepResult || prepResult.kind === 'abort') {
+      setAiThinking(false)
+      return
+    }
 
-    const rolled = JSON.parse(JSON.stringify(matchRef.current.asJson))
-
-    // Pause to show the dice before moving
-    await delay(1200)
-    if (aiTurnIdRef.current !== turnId) return
-
-    // Enumerate and score all candidates
-    const candidates = enumerateAllMoves(rolled)
-
-    if (candidates.length === 0 || matchRef.current.passable(AI_PLAYER)) {
+    if (prepResult.kind === 'pass') {
+      const { rolled } = prepResult
       matchRef.current.touchPass(AI_PLAYER)
       sync()
       setLastAiDice(rolled.game_state.dice)
       setAiThinking(false)
-      evaluatePosition(matchRef.current.asJson.game_state).then(prob => setWinProb(prob))
+      evaluatePosition(matchRef.current.asJson.game_state, { postTurnFast: true }).then(prob =>
+        setWinProb(prob)
+      )
       return
     }
 
-    const scored = await Promise.all(
-      candidates.map(c => evaluatePosition(c.gameState).then(p => ({ ...c, evalProb: p })))
-    )
-    if (aiTurnIdRef.current !== turnId) return
+    const { rolled, chosen } = prepResult
 
-    // Pick move based on difficulty
-    const chosen = selectAiMove(scored, vsAi, AI_PLAYER)
-    if (!chosen) {
-      setAiThinking(false)
-      return
-    }
-
-    // Execute moves one at a time so the human can watch
     for (const move of chosen.moves) {
-      await delay(650)
+      await delay(420)
       if (aiTurnIdRef.current !== turnId) return
 
-      // Select source (bar or point)
       if (move.from === 0) {
         matchRef.current.touchPoint('bar', AI_PLAYER)
       } else {
@@ -337,15 +400,12 @@ export function useGameState() {
       sync()
     }
 
-    // Pause after last move so player can see the final position
-    await delay(700)
+    await delay(450)
     if (aiTurnIdRef.current !== turnId) return
 
-    // Persist AI dice so human can see what was rolled until they roll their own
     setLastAiDice(rolled.game_state.dice)
 
-    // Update win prob silently (no training feedback for AI turns)
-    evaluatePosition(matchRef.current.asJson.game_state).then(prob => {
+    evaluatePosition(matchRef.current.asJson.game_state, { postTurnFast: true }).then(prob => {
       if (aiTurnIdRef.current === turnId) setWinProb(prob)
     })
 
@@ -356,14 +416,19 @@ export function useGameState() {
 
   function _onTurnComplete(afterJson, playerWhoMoved) {
     setPendingSubmit(true)
+    analysisReadyRef.current = false
+    submitWantedRef.current   = false
+    const seq = ++turnAnalysisSeqRef.current
 
     const scoringPromise = scoringPromiseRef.current ?? Promise.resolve(null)
     scoringPromiseRef.current = null
 
     Promise.all([
-      evaluatePosition(afterJson.game_state),
+      evaluatePosition(afterJson.game_state, { postTurnFast: true }),
       scoringPromise,
     ]).then(([newProb, scored]) => {
+      if (seq !== turnAnalysisSeqRef.current) return
+
       const pre  = scored?.pre  ?? null
       const best = scored?.best ?? null
 
@@ -377,31 +442,40 @@ export function useGameState() {
       }
 
       const beforeGameState = scored?.beforeGameState ?? null
+      const rolledDice      = scored?.dice ?? null
 
-      if (best !== null) {
+      pendingHintRef.current = null
+      pendingGoodMoveRef.current = null
+
+      if (best !== null && best.moves?.length) {
+        const playedKey = coachingPositionKey(afterJson.game_state)
+        const bestKey   = coachingPositionKey(best.gameState)
+        const playedBestBoard = playedKey === bestKey
+
         const margin = playerWhoMoved === 1
           ? (best.evalProb - newProb) * 100
           : (newProb - best.evalProb) * 100
 
-        if (margin > 1) {
-          import('../utils/evaluator').then(({ explainDifference }) => {
-            const explanation = explainDifference(
-              afterJson.game_state,
-              best.gameState,
-              playerWhoMoved
-            )
-            pendingHintRef.current = {
-              bestMoves:      best.moves,
-              playerWinPct:   newProb * 100,
-              bestWinPct:     best.evalProb * 100,
-              explanation,
-              playerWhoMoved,
-              beforeGameState,
-              afterGameState: best.gameState,
-            }
-          })
+        const SUBOPTIMAL_THRESHOLD = 0.75
+        const isSuboptimal         = !playedBestBoard && margin > SUBOPTIMAL_THRESHOLD
+
+        if (isSuboptimal) {
+          const explanation = explainDifference(
+            afterJson.game_state,
+            best.gameState,
+            playerWhoMoved
+          )
+          pendingHintRef.current = {
+            bestMoves:      best.moves,
+            playerWinPct:   newProb * 100,
+            bestWinPct:     best.evalProb * 100,
+            explanation,
+            playerWhoMoved,
+            beforeGameState,
+            afterGameState: best.gameState,
+            dice:           rolledDice,
+          }
         } else {
-          pendingHintRef.current = null
           setHint(null)
           const playerPct = playerWhoMoved === 1 ? newProb * 100 : (1 - newProb) * 100
           pendingGoodMoveRef.current = {
@@ -410,6 +484,13 @@ export function useGameState() {
           }
         }
       }
+
+      analysisReadyRef.current = true
+      flushSubmitHandoff()
+    }).catch(() => {
+      if (seq !== turnAnalysisSeqRef.current) return
+      analysisReadyRef.current = true
+      flushSubmitHandoff()
     })
   }
 

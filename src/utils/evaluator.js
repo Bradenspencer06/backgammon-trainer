@@ -3,8 +3,8 @@
  *
  * ╔══════════════════════════════════════════════════════════════════════╗
  * ║  PUBLIC API — this is the ONLY contract that matters for the app.   ║
- * ║  Replace this entire file with a GNU Backgammon WASM / API adapter  ║
- * ║  and nothing else in the codebase needs to change.                  ║
+ * ║  Strong evaluations: GNU via `bgwebEval.js` + optional local Docker. ║
+ * ║  Call-site API stays the same.                                      ║
  * ╚══════════════════════════════════════════════════════════════════════╝
  *
  * All functions accept the `game_state` slice from match.asJson:
@@ -13,10 +13,31 @@
  * All win-probability values are from BLACK's perspective (0 = Black loses, 1 = Black wins).
  * The UI layer converts to the current player's perspective as needed.
  *
- * CURRENT IMPLEMENTATION: heuristic evaluator (pip count + position quality).
- * Accurate enough to teach directional decision-making; not world-class.
- * Swap the file for production-grade analysis (e.g. gnubg equity tables).
+ * DEFAULT FALLBACK: heuristic evaluator (pip count + position quality) when the
+ * GNU server is off-line. See `bgwebEval.js` for the strong path.
  */
+
+import { evaluatePositionBgweb } from './bgwebEval.js'
+
+/** How many dice samples when scoring AI moves (env `VITE_AI_ROLL_SAMPLES`: number, or `full` for exact 36-roll average). */
+function aiRollMonteCarloSamples() {
+  const raw = import.meta.env.VITE_AI_ROLL_SAMPLES
+  if (raw === 'full' || raw === 'exact') return null
+  const n = Number(raw)
+  if (Number.isFinite(n) && n >= 21) return null
+  if (Number.isFinite(n) && n > 0) return Math.min(36, Math.floor(n))
+  return 8
+}
+
+/** Faster roll-phase eval after your turn (`VITE_POST_TURN_ROLL_SAMPLES`; default 6, or `full`). */
+function postTurnRollMonteCarloSamples() {
+  const raw = import.meta.env.VITE_POST_TURN_ROLL_SAMPLES
+  if (raw === 'full' || raw === 'exact') return null
+  const n = Number(raw)
+  if (Number.isFinite(n) && n >= 21) return null
+  if (Number.isFinite(n) && n > 0) return Math.min(36, Math.floor(n))
+  return 6
+}
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -26,9 +47,34 @@
  * without requiring callers to change.
  *
  * @param {Object} gameStateJson
+ * @param {Object} [options]
+ * @param {boolean} [options.aiMoveChoice] — AI candidate scoring (Monte Carlo by default; `aiExpertExact` = full roll average)
+ * @param {boolean} [options.aiExpertExact] — with `aiMoveChoice`, use exact GNU roll equity (slower, best openings)
+ * @param {boolean} [options.postTurnFast] — display / post-turn path (`VITE_POST_TURN_ROLL_SAMPLES`)
  * @returns {Promise<number>} Black's win probability, 0.0–1.0
  */
-export async function evaluatePosition(gameStateJson) {
+/** Synchronous rough win probability (Black’s perspective). Use for instant UI before GNU finishes. */
+export function evaluatePositionHeuristic(gameStateJson) {
+  return heuristicEval(gameStateJson)
+}
+
+export async function evaluatePosition(gameStateJson, options = {}) {
+  if (options.aiMoveChoice && import.meta.env.VITE_AI_RANKING_HEURISTIC === 'true') {
+    return heuristicEval(gameStateJson)
+  }
+
+  let mc = null
+  if (options.aiMoveChoice) {
+    mc = options.aiExpertExact ? null : aiRollMonteCarloSamples()
+  } else if (options.postTurnFast) {
+    mc = postTurnRollMonteCarloSamples()
+  }
+
+  const gnubg = await evaluatePositionBgweb(
+    gameStateJson,
+    mc != null ? { rollMonteCarloSamples: mc } : {}
+  )
+  if (gnubg != null) return gnubg
   return heuristicEval(gameStateJson)
 }
 

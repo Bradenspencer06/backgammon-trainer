@@ -2,7 +2,7 @@
  * WinBar — casino-style win probability display.
  *
  * - Percentage numbers animate like a scoreboard rolling to a new value
- * - Bar transitions slowly (1.2s ease-out) like a balance scale settling
+ * - Bar transitions quickly (~0.4s) so live odds feel responsive
  * - Delta slides in prominently on Submit, holds, then fades
  * - Subtle gold divider at the split point
  * - Faint glow on the leading side when significantly ahead
@@ -10,7 +10,7 @@
 import { useState, useEffect, useRef } from 'react'
 
 // ─── Animated integer counter ─────────────────────────────────────────────────
-function useAnimatedNumber(target, duration = 900) {
+function useAnimatedNumber(target, duration = 320) {
   const [display, setDisplay] = useState(target)
   const prevRef    = useRef(target)
   const rafRef     = useRef(null)
@@ -232,7 +232,7 @@ export default function WinBar({ winProb, delta, currentPlayer, vsAi }) {
             boxShadow:       blackLeading
               ? 'inset 0 0 8px rgba(255,255,255,0.05)'
               : 'none',
-            transition:      'width 1.2s cubic-bezier(0.4, 0, 0.2, 1)',
+            transition:      'width 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
           }}
         />
 
@@ -248,7 +248,7 @@ export default function WinBar({ winProb, delta, currentPlayer, vsAi }) {
               backgroundColor: '#c9a227',
               transform:       'translateX(-50%)',
               boxShadow:       '0 0 4px rgba(201,162,39,0.6)',
-              transition:      'left 1.2s cubic-bezier(0.4, 0, 0.2, 1)',
+              transition:      'left 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
             }}
           />
         )}

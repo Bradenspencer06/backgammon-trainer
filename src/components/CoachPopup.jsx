@@ -7,6 +7,44 @@
 import { useEffect } from 'react'
 import MiniBoardDemo from './MiniBoardDemo'
 
+const PIP_LAYOUTS = {
+  1: [[50,50]],
+  2: [[28,28],[72,72]],
+  3: [[28,28],[50,50],[72,72]],
+  4: [[28,28],[72,28],[28,72],[72,72]],
+  5: [[28,28],[72,28],[50,50],[28,72],[72,72]],
+  6: [[28,22],[72,22],[28,50],[72,50],[28,78],[72,78]],
+}
+
+function MiniDie({ value }) {
+  const pips = PIP_LAYOUTS[value] || []
+  return (
+    <div style={{
+      position:        'relative',
+      width:           '2rem',
+      height:          '2rem',
+      borderRadius:    8,
+      backgroundColor: '#f5f0e8',
+      border:          '1.5px solid #d1c5b0',
+      boxShadow:       '0 2px 6px rgba(0,0,0,0.4)',
+      flexShrink:      0,
+    }}>
+      {pips.map(([x, y], i) => (
+        <div key={i} style={{
+          position:        'absolute',
+          width:           '20%',
+          height:          '20%',
+          borderRadius:    '50%',
+          left:            `${x}%`,
+          top:             `${y}%`,
+          transform:       'translate(-50%,-50%)',
+          backgroundColor: '#1c1c1c',
+        }} />
+      ))}
+    </div>
+  )
+}
+
 export default function CoachPopup({
   open,
   onClose,
@@ -17,6 +55,7 @@ export default function CoachPopup({
   playerWhoMoved,
   beforeGameState,
   afterGameState,
+  dice,
 }) {
   // Lock body scroll while open
   useEffect(() => {
@@ -117,27 +156,39 @@ export default function CoachPopup({
             </div>
           </div>
 
-          {/* X close button */}
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            style={{
-              width:           '2rem',
-              height:          '2rem',
-              borderRadius:    '50%',
-              backgroundColor: '#1f2937',
-              border:          '1px solid #374151',
-              color:           '#9ca3af',
-              fontSize:        '1rem',
-              cursor:          'pointer',
-              display:         'flex',
-              alignItems:      'center',
-              justifyContent:  'center',
-              flexShrink:      0,
-            }}
-          >
-            ✕
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            {/* Dice that were rolled — reminder of what you were working with */}
+            {dice && dice.filter(d => d.number).length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <span style={{ fontFamily: 'monospace', fontSize: '0.55rem', color: '#4b5563', letterSpacing: '0.08em' }}>
+                  YOU ROLLED
+                </span>
+                {dice.map((d, i) => d.number ? <MiniDie key={i} value={d.number} /> : null)}
+              </div>
+            )}
+
+            {/* X close button */}
+            <button
+              onClick={onClose}
+              aria-label="Close"
+              style={{
+                width:           '2rem',
+                height:          '2rem',
+                borderRadius:    '50%',
+                backgroundColor: '#1f2937',
+                border:          '1px solid #374151',
+                color:           '#9ca3af',
+                fontSize:        '1rem',
+                cursor:          'pointer',
+                display:         'flex',
+                alignItems:      'center',
+                justifyContent:  'center',
+                flexShrink:      0,
+              }}
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         {/* ── Win% comparison ── */}

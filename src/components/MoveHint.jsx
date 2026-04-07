@@ -13,6 +13,7 @@ export default function MoveHint({
   playerWhoMoved,
   beforeGameState,
   afterGameState,
+  dice,
   onClose,
 }) {
   const [open, setOpen]           = useState(false)
@@ -98,6 +99,7 @@ export default function MoveHint({
         playerWhoMoved={playerWhoMoved}
         beforeGameState={beforeGameState}
         afterGameState={afterGameState}
+        dice={dice}
       />
 
       <style>{`

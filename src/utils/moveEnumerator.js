@@ -166,3 +166,11 @@ function positionKey(gs) {
     .map(p => `${p.number}:${p.pieces.map(pc => pc.player_number).join('')}`)
     .join('|')
 }
+
+/** Same board identity including bar and borne-off (for “did they play to the best line?”). */
+export function coachingPositionKey(gs) {
+  const pts = positionKey(gs)
+  const barIds = [...(gs.bar?.pieces ?? [])].map((p) => p.player_number).sort((a, b) => a - b).join('')
+  const offIds = [...(gs.off_board?.pieces ?? [])].map((p) => p.player_number).sort((a, b) => a - b).join('')
+  return `${pts}#b${barIds}#o${offIds}`
+}

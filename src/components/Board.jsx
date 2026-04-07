@@ -231,14 +231,7 @@ export default function Board({
             <div style={{ height: ROW_H }}>
               <Quadrant points={TOP_LEFT} isTop {...quadrantProps} />
             </div>
-            <div className="flex items-center justify-center" style={{ height: '2rem', backgroundColor: RAIL }}>
-              <div
-                className="w-6 h-6 rounded flex items-center justify-center select-none"
-                style={{ backgroundColor: '#f5f0e8', fontSize: '0.6rem', fontWeight: 700, color: '#222', boxShadow: '0 2px 4px rgba(0,0,0,0.4)' }}
-              >
-                64
-              </div>
-            </div>
+            <div style={{ height: '2rem', backgroundColor: RAIL }} />
             <div style={{ height: ROW_H }}>
               <Quadrant points={BOT_LEFT} isTop={false} {...quadrantProps} />
             </div>
@@ -272,6 +265,7 @@ export default function Board({
           playerWhoMoved={hint.playerWhoMoved}
           beforeGameState={hint.beforeGameState}
           afterGameState={hint.afterGameState}
+          dice={hint.dice}
           onClose={onHintClose}
         />
       )}
