@@ -7,8 +7,9 @@
  *      docker run --rm -p 8080:8080 foochu/bgweb-api:latest
  *    Leave that running. It is a small local server that answers “what’s the
  *    best play and exact win chances?” using GNU BG.
- * 3. Run this app with `npm run dev` (or `vite preview` on localhost). Vite
- *    forwards `/bgweb-api` to that server.
+ * 3. Recommended: run the engine BFF + GNU stack (one browser round-trip per
+ *    roll evaluation): `npm run dev:stack` (see package.json). Vite proxies
+ *    `/engine-bff` → BFF and `/bgweb-api` → GNU for fallbacks.
  *
  * Optional env: `VITE_BGWEB_CONCURRENCY` — max parallel requests (default 12).
  * AI: `VITE_AI_ROLL_SAMPLES`. Coaching / post-turn display: `VITE_POST_TURN_ROLL_SAMPLES` (default 6, or `full`).
@@ -76,12 +77,47 @@ function endpointUrl() {
   if (configured)
     return `${String(configured).replace(/\/$/, '')}/api/v1/getmoves`
   if (import.meta.env.DEV) return '/bgweb-api/api/v1/getmoves'
-  // `vite preview` is "production" but still proxies /bgweb-api on localhost
   if (typeof window !== 'undefined') {
     const h = window.location.hostname
     if (h === 'localhost' || h === '127.0.0.1') return '/bgweb-api/api/v1/getmoves'
   }
   return null
+}
+
+/** Batched engine proxy (recommended). Production: set `VITE_ENGINE_BFF_URL` at build time. */
+function batchEndpointUrl() {
+  const configured = import.meta.env.VITE_ENGINE_BFF_URL
+  if (configured) return `${String(configured).replace(/\/$/, '')}/api/v1/batch-getmoves`
+  if (import.meta.env.DEV && typeof window !== 'undefined')
+    return '/engine-bff/api/v1/batch-getmoves'
+  if (typeof window !== 'undefined') {
+    const h = window.location.hostname
+    if (h === 'localhost' || h === '127.0.0.1') return '/engine-bff/api/v1/batch-getmoves'
+  }
+  return null
+}
+
+function engineReachable() {
+  return Boolean(endpointUrl() || batchEndpointUrl())
+}
+
+async function postBatchToBff(bodies) {
+  const url = batchEndpointUrl()
+  if (!url || bodies.length === 0) return null
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: bodies.map((body) => ({ body })) }),
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    const results = data?.results
+    if (!Array.isArray(results) || results.length !== bodies.length) return null
+    return results.map((r) => (typeof r?.win === 'number' && !Number.isNaN(r.win) ? r.win : null))
+  } catch {
+    return null
+  }
 }
 
 function moverWinProbFromResponse(data) {
@@ -94,7 +130,7 @@ function moverWinProbFromResponse(data) {
  * @param {object} body — MoveArgs JSON for bgweb-api
  * @returns {Promise<number|null>} mover’s win probability after best play, or null on failure
  */
-async function postGetMoves(body) {
+async function postGetMovesDirect(body) {
   const url = endpointUrl()
   if (!url) return null
 
@@ -116,7 +152,7 @@ async function postGetMoves(body) {
 
     const responseText = await res.text()
     if (ENGINE_DEBUG) {
-      console.warn('[ENGINE_DEBUG] ─── bgweb getmoves ───')
+      console.warn('[ENGINE_DEBUG] ─── bgweb getmoves (direct) ───')
       console.warn('[ENGINE_DEBUG] request URL:', url)
       console.warn('[ENGINE_DEBUG] raw request JSON:', reqJson)
       console.warn('[ENGINE_DEBUG] HTTP status:', res.status, res.statusText)
@@ -134,6 +170,15 @@ async function postGetMoves(body) {
   } finally {
     releaseRequestSlot()
   }
+}
+
+async function postGetMoves(body) {
+  const batchUrl = batchEndpointUrl()
+  if (batchUrl) {
+    const batch = await postBatchToBff([body])
+    if (batch && batch.length === 1 && batch[0] != null) return batch[0]
+  }
+  return postGetMovesDirect(body)
 }
 
 function playerArg(gs) {
@@ -214,19 +259,22 @@ async function evaluateRollPhaseMonteCarlo(gs, samples) {
   const player = playerArg(gs)
   const n = Math.max(1, Math.min(samples, 36))
 
-  const moverWins = await Promise.all(
-    Array.from({ length: n }, () => {
-      const dice = sampleDiceRoll36()
-      return postGetMoves({
-        board,
-        dice,
-        player,
-        'max-moves': 1,
-        'score-moves': true,
-        cubeful: false,
-      })
-    })
-  )
+  const bodies = Array.from({ length: n }, () => {
+    const dice = sampleDiceRoll36()
+    return {
+      board,
+      dice,
+      player,
+      'max-moves': 1,
+      'score-moves': true,
+      cubeful: false,
+    }
+  })
+
+  let moverWins = await postBatchToBff(bodies)
+  if (!moverWins || moverWins.some((m) => m == null)) {
+    moverWins = await Promise.all(bodies.map((b) => postGetMovesDirect(b)))
+  }
 
   if (moverWins.some((m) => m == null)) return null
   let sum = 0
@@ -238,24 +286,26 @@ async function evaluateRollPhaseBlackWin(gs) {
   const board = gameStateToBgwebBoard(gs)
   const player = playerArg(gs)
 
-  const parts = await Promise.all(
-    DICE_WEIGHTS.map(async ({ dice, w }) => {
-      const body = {
-        board,
-        dice,
-        player,
-        'max-moves': 1,
-        'score-moves': true,
-        cubeful: false,
-      }
-      const moverWin = await postGetMoves(body)
-      if (moverWin == null) return null
-      return w * moverToBlackWinProb(gs, moverWin)
-    })
-  )
+  const bodies = DICE_WEIGHTS.map(({ dice }) => ({
+    board,
+    dice,
+    player,
+    'max-moves': 1,
+    'score-moves': true,
+    cubeful: false,
+  }))
 
-  if (parts.some((p) => p === null)) return null
-  return parts.reduce((a, b) => a + b, 0)
+  let moverWins = await postBatchToBff(bodies)
+  if (!moverWins || moverWins.some((m) => m == null)) {
+    moverWins = await Promise.all(bodies.map((b) => postGetMovesDirect(b)))
+  }
+
+  if (moverWins.some((m) => m == null)) return null
+  let sum = 0
+  for (let i = 0; i < moverWins.length; i++) {
+    sum += DICE_WEIGHTS[i].w * moverToBlackWinProb(gs, moverWins[i])
+  }
+  return sum
 }
 
 async function evaluateMovePhaseBlackWin(gs) {
@@ -282,8 +332,7 @@ async function evaluateMovePhaseBlackWin(gs) {
  * @returns {Promise<number|null>} Black’s cubeless win probability, or null if bgweb unavailable
  */
 export async function evaluatePositionBgweb(gameStateJson, options = {}) {
-  const url = endpointUrl()
-  if (!url) return null
+  if (!engineReachable()) return null
 
   if (ENGINE_DEBUG) {
     logEngineDebugSemantics(gameStateJson, 'evaluatePositionBgweb entry')
@@ -308,14 +357,14 @@ export async function evaluatePositionBgweb(gameStateJson, options = {}) {
   if (p != null && !confirmedBgweb) {
     confirmedBgweb = true
     console.info(
-      '[backgammon-trainer] Evaluations use GNU Backgammon via bgweb-api (not the heuristic fallback).'
+      '[backgammon-trainer] Evaluations use GNU Backgammon (via engine BFF batching and/or bgweb-api).'
     )
   }
 
   if (p == null && !warnedNoBgweb) {
     warnedNoBgweb = true
     console.warn(
-      '[backgammon-trainer] GNU evaluation server not reachable — using fallback heuristic. Run: docker run --rm -p 8080:8080 foochu/bgweb-api:latest'
+      '[backgammon-trainer] GNU unreachable (direct or BFF) — using heuristic fallback. Try: `npm run dev:stack` or docker compose up (see docker-compose.yml).'
     )
   }
   return p

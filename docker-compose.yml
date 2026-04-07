@@ -1,0 +1,30 @@
+# Local / VPS stack: GNU (bgweb-api) + engine BFF + optional static frontend.
+#
+#   docker compose up --build
+#
+# Then either:
+#   - Serve `dist/` from any static host with VITE_ENGINE_BFF_URL pointing at the BFF, or
+#   - Develop: npm run dev (proxies to BFF :3001 and GNU :8080 on the host).
+#
+# Deploy: put this compose on a server with ports 80/443 via a reverse proxy to `bff` and `web`.
+
+services:
+  bgweb:
+    image: foochu/bgweb-api:latest
+    ports:
+      - '8080:8080'
+
+  bff:
+    build:
+      context: .
+      dockerfile: Dockerfile.bff
+    environment:
+      PORT: '3001'
+      BGWEB_UPSTREAM: http://bgweb:8080
+      ENGINE_BFF_CACHE_MAX: '4000'
+      ENGINE_BFF_UPSTREAM_CONCURRENCY: '12'
+      ENGINE_BFF_CORS_ORIGIN: ${ENGINE_BFF_CORS_ORIGIN:-*}
+    ports:
+      - '3001:3001'
+    depends_on:
+      - bgweb

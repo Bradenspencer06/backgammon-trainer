@@ -8,6 +8,12 @@ const bgwebProxy = {
     changeOrigin: true,
     rewrite: (path) => path.replace(/^\/bgweb-api/, ''),
   },
+  /** Engine BFF — run `npm run engine-bff` (batches + cache, then talks to GNU). */
+  '/engine-bff': {
+    target: 'http://127.0.0.1:3001',
+    changeOrigin: true,
+    rewrite: (path) => path.replace(/^\/engine-bff/, ''),
+  },
 }
 
 export default defineConfig({
