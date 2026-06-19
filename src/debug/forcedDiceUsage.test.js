@@ -131,4 +131,39 @@ describe('forced dice usage', () => {
       '1->4,4->7,7->10,10->13',
     ])
   })
+
+  it('enters from the bar before allowing normal board moves', () => {
+    const snapshot = {
+      id: 1,
+      game_state: {
+        current_player_number: 1,
+        current_phase: 'move',
+        first_turn: false,
+        dice: [
+          { number: 3, used: false },
+          { number: 2, used: false },
+        ],
+        bar: { pieces: pieces(1, 1) },
+        off_board: { pieces: pieces(13, 1) },
+        points: Array.from({ length: 24 }, (_, i) => {
+          const number = i + 1
+          if (number === 6) return point(number, 1)
+          if (number === 24) return point(number, 0, 15)
+          return point(number)
+        }),
+      },
+      players: [
+        { player_number: 1, name: 'Black' },
+        { player_number: 2, name: 'White' },
+      ],
+      move_list: [],
+      last_action: null,
+      notification: '',
+    }
+
+    const candidates = enumerateAllMoves(snapshot)
+
+    expect(candidates.length).toBeGreaterThan(0)
+    expect(candidates.every(({ moves }) => moves[0]?.from === 0)).toBe(true)
+  })
 })
