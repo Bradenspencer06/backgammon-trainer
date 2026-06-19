@@ -43,7 +43,7 @@ export function enumerateAllMoves(matchSnapshot) {
   // trigger after only one real move instead of two.
   _enumerate({ ...matchSnapshot, move_list: [] }, [], results)
 
-  return deduplicateByPosition(results)
+  return enforceHigherDieRule(enforceMaxDiceUsage(deduplicateByPosition(results)), gs)
 }
 
 // ─── Private helpers ──────────────────────────────────────────────────────────
@@ -145,6 +145,56 @@ function tryMove(snapshot, src, dst, player) {
   }
 
   return { type: 'invalid' }
+}
+
+/** Backgammon requires using as many dice as possible. */
+function enforceMaxDiceUsage(results) {
+  if (results.length === 0) return results
+  const maxMoveCount = Math.max(...results.map(r => r.moves.length))
+  return results.filter(r => r.moves.length === maxMoveCount)
+}
+
+/**
+ * If only one die can be played from a non-double roll, backgammon requires the
+ * higher die. This is deliberately narrow: it fixes that proven rule without
+ * attempting a broader turn-generation rewrite.
+ */
+function enforceHigherDieRule(results, gs) {
+  if (results.length === 0) return results
+
+  const maxMoveCount = Math.max(...results.map(r => r.moves.length))
+  if (maxMoveCount !== 1) return results
+
+  const dice = (gs.dice ?? [])
+    .filter(d => d.number != null && !d.used)
+    .map(d => d.number)
+  const uniqueDice = [...new Set(dice)]
+  if (uniqueDice.length !== 2) return results
+
+  const higherDie = Math.max(...uniqueDice)
+  const higherDieResults = results.filter(r =>
+    r.moves.length === 1 && moveCanUseDie(r.moves[0], higherDie, gs.current_player_number)
+  )
+
+  return higherDieResults.length > 0 ? higherDieResults : results
+}
+
+function moveCanUseDie(move, dieNumber, player) {
+  const distance = moveDistance(move, player)
+  if (distance === null) return false
+  return move.to === BEAR_OFF ? dieNumber >= distance : dieNumber === distance
+}
+
+function moveDistance(move, player) {
+  const from = move.from === BAR_SRC
+    ? (player === 1 ? 0 : 25)
+    : move.from
+  const to = move.to === BEAR_OFF
+    ? (player === 1 ? 25 : 0)
+    : move.to
+
+  if (typeof from !== 'number' || typeof to !== 'number') return null
+  return Math.abs(to - from)
 }
 
 /**
