@@ -48,4 +48,43 @@ describe('forced dice usage', () => {
 
     expect(moveKeys).toEqual(['1->5'])
   })
+
+  it('uses both dice when a complete 4-2 turn is possible', () => {
+    const snapshot = {
+      id: 1,
+      game_state: {
+        current_player_number: 1,
+        current_phase: 'move',
+        first_turn: false,
+        dice: [
+          { number: 4, used: false },
+          { number: 2, used: false },
+        ],
+        bar: { pieces: [] },
+        off_board: { pieces: pieces(13, 1) },
+        points: Array.from({ length: 24 }, (_, i) => {
+          const number = i + 1
+          if (number === 1) return point(number, 1)
+          if (number === 2) return point(number, 1)
+          if (number === 3) return point(number, 0, 2)
+          if (number === 8) return point(number, 0, 2)
+          if (number === 24) return point(number, 0, 11)
+          return point(number)
+        }),
+      },
+      players: [
+        { player_number: 1, name: 'Black' },
+        { player_number: 2, name: 'White' },
+      ],
+      move_list: [],
+      last_action: null,
+      notification: '',
+    }
+
+    const moveKeys = enumerateAllMoves(snapshot)
+      .map(({ moves }) => moves.map((m) => `${m.from}->${m.to}`).join(','))
+      .sort()
+
+    expect(moveKeys).toEqual(['1->5,2->4', '1->5,5->7'])
+  })
 })
