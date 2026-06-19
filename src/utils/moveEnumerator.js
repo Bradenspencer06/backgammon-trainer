@@ -43,7 +43,7 @@ export function enumerateAllMoves(matchSnapshot) {
   // trigger after only one real move instead of two.
   _enumerate({ ...matchSnapshot, move_list: [] }, [], results)
 
-  return enforceHigherDieRule(deduplicateByPosition(results), gs)
+  return enforceHigherDieRule(enforceMaxDiceUsage(deduplicateByPosition(results)), gs)
 }
 
 // ─── Private helpers ──────────────────────────────────────────────────────────
@@ -145,6 +145,13 @@ function tryMove(snapshot, src, dst, player) {
   }
 
   return { type: 'invalid' }
+}
+
+/** Backgammon requires using as many dice as possible. */
+function enforceMaxDiceUsage(results) {
+  if (results.length === 0) return results
+  const maxMoveCount = Math.max(...results.map(r => r.moves.length))
+  return results.filter(r => r.moves.length === maxMoveCount)
 }
 
 /**
