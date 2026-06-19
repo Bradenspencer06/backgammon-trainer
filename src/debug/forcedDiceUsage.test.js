@@ -166,4 +166,46 @@ describe('forced dice usage', () => {
     expect(candidates.length).toBeGreaterThan(0)
     expect(candidates.every(({ moves }) => moves[0]?.from === 0)).toBe(true)
   })
+
+  it('only allows higher-die bear off from the farthest checker', () => {
+    const snapshot = {
+      id: 1,
+      game_state: {
+        current_player_number: 1,
+        current_phase: 'move',
+        first_turn: false,
+        dice: [
+          { number: 6, used: false },
+          { number: 4, used: false },
+        ],
+        bar: { pieces: [] },
+        off_board: { pieces: pieces(12, 1) },
+        points: Array.from({ length: 24 }, (_, i) => {
+          const number = i + 1
+          if (number === 20) return point(number, 1)
+          if (number === 21) return point(number, 1)
+          if (number === 23) return point(number, 1)
+          if (number === 1) return point(number, 0, 15)
+          return point(number)
+        }),
+      },
+      players: [
+        { player_number: 1, name: 'Black' },
+        { player_number: 2, name: 'White' },
+      ],
+      move_list: [],
+      last_action: null,
+      notification: '',
+    }
+
+    const candidates = enumerateAllMoves(snapshot)
+    const moveKeys = candidates
+      .map(({ moves }) => moves.map((m) => `${m.from}->${m.to}`).join(','))
+      .sort()
+
+    expect(moveKeys).toEqual(['20->24,21->off_board', '20->off_board,21->off_board'])
+    expect(candidates.some(({ moves }) =>
+      moves.some((m) => m.from === 23 && m.to === 'off_board')
+    )).toBe(false)
+  })
 })
